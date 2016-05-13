@@ -43,10 +43,6 @@ object rules{
     Rewrite(from = x.filter(a).filter(b), 
             to   = x.filter(x => a(x) && b(x)))
 
-  def prettyPrint(x: Any)(implicit source: Source[x.type]) =
-    Rewrite(from = Test.myPrettyPrint(x),       // additionally to optimisations, possible use-cases include pretty-printing of debug messages
-              to = println(source + " = " + x)) // source here will be replaced by the tree.show corresponding to `x`
-
   def customFancyWarning(x: ParSeq[Int], x: (Int, Int) => Int) =
     Warn(pattern = x.reduceLeft(x)),            // custom warnings are also supported
              msg = “reduceLeft on parallel collection makes no sense”)
