@@ -61,7 +61,7 @@ class Compiler {
            new CrossCastAnd,
            new Splitter),
       //List(new TypeSpecializer),
-      //List(new OuterSpecializer),
+      List(new OuterSpecializer),
       List(new OuterSpecializeParents),
       List(new VCInlineMethods,
            new SeqLiterals,
