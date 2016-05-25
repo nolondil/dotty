@@ -687,7 +687,7 @@ class BuildCallGraph extends Phase {
 
   /**
     * @param mode see modes above
-    * @param specLimit how many specializations symbol can have xam
+    * @param specLimit how many specializations symbol can have max
     * @return (reachableMethods, reachableTypes, casts, outerMethod)
     */
   def buildCallGraph(mode: Int, specLimit: Int)(implicit ctx: Context): (Set[CallWithContext], Set[TypeWithContext], Set[Cast], Set[Symbol]) = {
