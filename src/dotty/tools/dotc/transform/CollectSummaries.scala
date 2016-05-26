@@ -1133,22 +1133,53 @@ class BuildCallGraph extends Phase {
 
     def escape(s: String) = s.replace("\\", "\\\\").replace("\"","\\\"")
 
+    def fullNameSeparated(symbol: Symbol)(separator: String)(implicit ctx: Context): Name = {
+      var sep = separator
+      val owner = symbol.owner
+      var name: Name = symbol.name
+      var stopAtPackage = false
+      if (sep.isEmpty) {
+        sep = "$"
+        stopAtPackage = true
+      }
+      if (symbol.isAnonymousClass || symbol.isAnonymousFunction)
+         name = name ++ symbol.id.toString
+      if (symbol == NoSymbol ||
+        owner == NoSymbol ||
+        owner.isEffectiveRoot ||
+        stopAtPackage && owner.is(PackageClass)) name
+      else {
+        var encl = owner
+        while (!encl.isClass && !encl.isPackageObject) {
+          encl = encl.owner
+          sep += "~"
+        }
+        if (owner.is(ModuleClass, butNot = Package) && sep == "$") sep = "" // duplicate scalac's behavior: don't write a double '$$' for module class members.
+        val fn = fullNameSeparated(encl)(separator) ++ sep ++ name
+        if (symbol.isType) fn.toTypeName else fn.toTermName
+      }
+    }
+
+    def symbolName(s: Symbol): String = {
+      escape(fullNameSeparated(s)(".").show)
+    }
+
     def typeName(x: Type): String = {
       x match {
         case ConstantType(value) => s"${escape(value.toString)}"
         case _ =>
           val t = x.termSymbol.orElse(x.typeSymbol)
           if (t.exists)
-            escape(t.name.toString)
+            symbolName(t)
           else escape(x.show)
       }
     }
 
     def csWTToName(x: CallWithContext, close: Boolean = true, open: Boolean = true): String = {
       if (x.call.termSymbol.owner == x.call.normalizedPrefix.classSymbol) {
-        s"${if (open) slash else ""}${escape(x.call.normalizedPrefix.show)}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
+        s"${if (open) slash else ""}${typeName(x.call)}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
       } else {
-        s"${if (open) slash else ""}${escape(x.call.normalizedPrefix.show)}.super.${escape(x.call.termSymbol.showFullName)}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
+        s"${if (open) slash else ""}${typeName(x.call.normalizedPrefix)}.super.${symbolName(x.call.termSymbol)}${if (x.targs.nonEmpty) "[" + x.targs.map(x => typeName(x)).mkString(",") + "]" else ""}${if (close) slash else ""}"
       }
     }
 
