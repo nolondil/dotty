@@ -15,7 +15,7 @@ import transform.TreeTransforms.{TreeTransform, TreeTransformer}
 import core.DenotTransformers.DenotTransformer
 import core.Denotations.SingleDenotation
 import dotty.tools.backend.jvm.{GenBCode, LabelDefs}
-import dotty.tools.dotc.transform.linker.Rewrites
+import dotty.tools.dotc.transform.linker.{AnalyzeClosures, MinimizeClosures, Rewrites}
 
 class Compiler {
 
@@ -44,6 +44,7 @@ class Compiler {
       //List(new ExpandPrivate),
       List(new CollectSummaries),
       List(new BuildCallGraph),
+      List(new AnalyzeClosures),
       List(new FirstTransform,
            new CheckReentrant),
       List(new PreSpecializer,
@@ -91,6 +92,7 @@ class Compiler {
            new RestoreScopes),
       List(/*new PrivateToStatic,*/
            // new PrintMethodSignatures,
+           new MinimizeClosures,
            new CollectEntryPoints,
            new LabelDefs),
       List(new GenBCode)
