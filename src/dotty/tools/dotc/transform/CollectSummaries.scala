@@ -619,6 +619,16 @@ object Summaries {
 }
 
 class BuildCallGraph extends Phase {
+  private var reachableMethods: Set[CallWithContext] = null
+  private var reachableTypes: Set[TypeWithContext] = null
+  private var casts: Set[Cast] = null
+  private var outerMethods: Set[Symbol] = null
+
+  def getReachableMethods = reachableMethods
+  def getReachableTypes   = reachableTypes
+  def getReachableCasts   = casts
+  def getOuterMethods     = outerMethods
+
   import tpd._
   def phaseName: String = "callGraph"
   def isEntryPoint(s: Symbol)(implicit ctx: Context): Boolean = {
@@ -1307,9 +1317,10 @@ class BuildCallGraph extends Phase {
       //val g2 = buildCallGraph(AnalyseTypes, specLimit)
 
       println(s"\n\t\t\tType & Arg flow analisys")
-      val (reachableMethods, reachableTypes, casts, outerMethod) = buildCallGraph(AnalyseArgs, specLimit)
-      val g3 = outputGraph(AnalyseArgs, specLimit)(reachableMethods, reachableTypes, casts, outerMethod)
-      sendSpecializationRequests(reachableMethods, reachableTypes, casts, outerMethod)
+      val cg = buildCallGraph(AnalyseArgs, specLimit)
+      reachableMethods = cg._1; reachableTypes = cg._2; casts = cg._3; outerMethods = cg._4
+      val g3 = outputGraph(AnalyseArgs, specLimit)(reachableMethods, reachableTypes, casts, outerMethods)
+      sendSpecializationRequests(reachableMethods, reachableTypes, casts, outerMethods)
 
       def printToFile(f: java.io.File)(op: java.io.PrintWriter => Unit): Unit = {
         val p = new java.io.PrintWriter(f)
