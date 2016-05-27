@@ -58,7 +58,8 @@ class AnalyzeClosures extends MiniPhaseTransform {
       ownerWhiteList.contains(owner)
     }.map(x => x.call.termSymbol).toSet
 
-    accessedFileds.put(tree.meth.symbol, ownerWhiteList)
+    // todo: check if it uses refference equality if not, do not add to map
+    accessedFileds.put(tree.meth.symbol, fieldsDefinedOutside)
 
     tree
   }
