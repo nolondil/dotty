@@ -1012,12 +1012,18 @@ class BuildCallGraph extends Phase {
             currentThis = currentThis.normalizedPrefix
             currentOwner = currentOwner.owner.enclosingClass
           }
+          if (currentThis.derivesFrom(thisType.cls)) {
+            val fullThisType = AndType.apply(currentThis, thisType.tref)
+            if (calleeSymbol.is(Private))
+              new CallWithContext(TermRef.withFixedSym(currentThis, calleeSymbol.name, calleeSymbol), targs, args, outerTargs, caller, callee) :: Nil
+            else dispatchCalls(propagateTargs(fullThisType))
+          } else {
+            dispatchCalls(propagateTargs(receiver.widenDealias))
+          }
+
           // todo: handle calls on this of outer classes
 
-          val fullThisType = AndType.apply(currentThis, thisType.tref)
-          if (calleeSymbol.is(Private))
-            new CallWithContext(TermRef.withFixedSym(currentThis, calleeSymbol.name, calleeSymbol), targs, args, outerTargs, caller, callee) :: Nil
-          else dispatchCalls(propagateTargs(fullThisType))
+
         case _: PreciseType =>
           dispatchCalls(propagateTargs(receiver))
         case _: ClosureType =>
