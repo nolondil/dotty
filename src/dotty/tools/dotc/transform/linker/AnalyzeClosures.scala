@@ -39,7 +39,11 @@ class AnalyzeClosures extends MiniPhaseTransform {
     val starts = reachableMethods.filter(x => x.call.termSymbol == tree.meth.symbol)
     val _visited = new util.IdentityHashMap[CallWithContext, CallWithContext]()
     def isVisited(c: CallWithContext) = _visited.containsKey(c)
-    def markVisited(c: CallWithContext) = _visited.put(c, c)
+    var eqVisited = false
+    def markVisited(c: CallWithContext) = {
+      if (!eqVisited) eqVisited = c.call.termSymbol eq defn.Object_eq
+      _visited.put(c, c)
+    }
 
     starts.foreach(markVisited)
     val queue = collection.mutable.Queue(starts.toSeq: _*)
@@ -58,8 +62,8 @@ class AnalyzeClosures extends MiniPhaseTransform {
       ownerWhiteList.contains(owner)
     }.map(x => x.call.termSymbol).toSet
 
-    // todo: check if it uses refference equality if not, do not add to map
-    accessedFileds.put(tree.meth.symbol, fieldsDefinedOutside)
+    if (!eqVisited)
+      accessedFileds.put(tree.meth.symbol, fieldsDefinedOutside)
 
     tree
   }
