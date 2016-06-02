@@ -3,8 +3,9 @@
 
     val s = 1
     val payload = List(1, 2, 3)
-    def noCapture  =       bar{x => println(x); x}
-    def yesCapture =       bar{x => s}
+    def noCapture  =           bar{x => println(x); x}
+    def yesCapture =           bar{x => s}
+    def yesCaptureThis =       bar{x => getS}
     /* 
      dotty: 
     public int yesCapture() {
