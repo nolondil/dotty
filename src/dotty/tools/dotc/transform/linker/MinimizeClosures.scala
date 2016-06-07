@@ -46,7 +46,7 @@ class MinimizeClosures extends MiniPhaseTransform with IdentityDenotTransformer 
           val clone = t.select(nme.clone_).appliedToNone.ensureConforms(staticType)
           val nonMethods = t.tpe.widenDealias.membersBasedOnFlags(EmptyFlags, Flags.Method)
           val fieldsToNullOut = t.tpe.widenDealias.fields.filter(f => f.info.derivesFrom(defn.ObjectClass) && !acessedFields.contains(f.symbol))
-          if (fieldsToNullOut.nonEmpty) {
+          if (fieldsToNullOut.nonEmpty && !acessedFields.exists(x => x.owner == staticType.typeSymbol && (x is Flags.Mutable))) {
             if (!staticType.derivesFrom(defn.JavaCloneableClass)) {
               val symDenot = staticType.typeSymbol.denot.asSymDenotation
               val newInfo = symDenot.info match {

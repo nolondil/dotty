@@ -1,9 +1,11 @@
   class LeakMe[T] { // optimization silently adds cloneable
     def bar(a: Int => Int) = a(2)
 
-    val s = 1
+    val s       = 1
+    var mut     = 1
     val payload = List(1, 2, 3)
     def noCapture  =           bar{x => println(x); x}
+    def yesCaptureMutable  =   bar{x => mut + x}
     def yesCapture =           bar{x => s}
     def yesCaptureThis =       bar{x => getS}
     /* 
@@ -29,7 +31,9 @@ object Test {
 //    s
 //    getS
     //noCapture; 
-    yesCapture
+    //yesCapture
+     yesCaptureMutable;
+
     ()
   }
 
