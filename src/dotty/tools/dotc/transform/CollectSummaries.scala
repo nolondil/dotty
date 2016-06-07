@@ -930,9 +930,9 @@ class BuildCallGraph extends Phase {
           val to = propagateTargs(targs.head)
           addCast(from, to)
           Nil
-        case _ if defn.ObjectMethods.contains(calleeSymbol) || defn.AnyMethods.contains(calleeSymbol) =>
-          // TODO: only for paper
-          Nil
+//        case _ if defn.ObjectMethods.contains(calleeSymbol) || defn.AnyMethods.contains(calleeSymbol) =>
+//          // TODO: only for paper
+//          Nil
         case NoPrefix =>  // inner method
           assert(callee.call.termSymbol.owner.is(Method) || callee.call.termSymbol.owner.isLocalDummy)
           new CallWithContext(TermRef.withFixedSym(caller.call.normalizedPrefix, calleeSymbol.name, calleeSymbol), targs, args, outerTargs, caller, callee) :: Nil
