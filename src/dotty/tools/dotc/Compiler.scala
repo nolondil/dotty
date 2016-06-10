@@ -15,7 +15,7 @@ import transform.TreeTransforms.{TreeTransform, TreeTransformer}
 import core.DenotTransformers.DenotTransformer
 import core.Denotations.SingleDenotation
 import dotty.tools.backend.jvm.{GenBCode, LabelDefs}
-import dotty.tools.dotc.transform.linker.{AnalyzeClosures, MinimizeClosures, Rewrites}
+import dotty.tools.dotc.transform.linker.{AnalyzeClosures, Simplify, MinimizeClosures, Rewrites}
 
 class Compiler {
 
@@ -71,7 +71,8 @@ class Compiler {
            new ClassTags,
            new ElimByName,
            new AugmentScala2Traits,
-           new ResolveSuper/*,
+           new ResolveSuper,
+           new Simplify/*,
            new Rewrites*/),
       List(new Erasure),
       List(new ElimErasedValueType,
