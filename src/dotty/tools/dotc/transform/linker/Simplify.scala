@@ -92,7 +92,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
           val rhst = new TreeMap() {
             override def transform(tree: tpd.Tree)(implicit ctx: Context): tpd.Tree = nextTransformer(super.transform(tree))
           }.transform(rhs0)
-          //if (rhst ne rhs0) println(s"${tree.symbol} after ${name} became ${rhst.show}")
+          if (rhst ne rhs0) println(s"${tree.symbol} after ${name} became ${rhst.show}")
           rhs0 = rhst
 
           names = names.tail
@@ -109,10 +109,11 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
     implicit val ctx = ctx0
     val transformer: Transformer = () => {
       case a: Apply if a.symbol.is(Flags.Synthetic) && a.symbol.owner.is(Flags.Module) &&
-        (a.symbol.name == nme.apply || (a.symbol.name == nme.unapply)) && a.symbol.owner.companionClass.is(Flags.CaseClass) =>
-        if (a.symbol.name == nme.unapply) a.args.head
-        else if (a.symbol.name == nme.apply) tpd.New(a.tpe, a.args)
-        else ???
+        (a.symbol.name == nme.apply) && a.symbol.owner.companionClass.is(Flags.CaseClass) =>
+        tpd.New(a.tpe, a.args)
+      case a: Apply if a.symbol.is(Flags.Synthetic) && a.symbol.owner.is(Flags.Module) &&
+        (a.symbol.name == nme.unapply) && a.symbol.owner.companionClass.is(Flags.CaseClass) && !a.symbol.owner.is(Flags.Scala2x) =>
+        a.args.head
       case t => t
     }
     ("inlineCaseIntrinsics", NoVisitor, transformer)
