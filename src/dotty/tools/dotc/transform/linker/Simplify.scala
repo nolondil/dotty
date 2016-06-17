@@ -130,7 +130,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
         case If(_, thenp, elsep) => followTailPerfect(thenp, symbol); followTailPerfect(elsep, symbol);
         case Apply(fun, _) if fun.symbol.isConstructor && t.tpe.widenDealias == symbol.info.widenDealias.finalResultType.widenDealias =>
           hasPerfectRHS(symbol) = true
-        case Apply(fun, _) if fun.symbol.is(Flags.Label) =>
+        case Apply(fun, _) if fun.symbol.is(Flags.Label) && (fun.symbol ne symbol) =>
           checkGood.put(fun.symbol, symbol)
         case t: Ident if !t.symbol.owner.isClass =>
           checkGood.put(t.symbol, symbol)
