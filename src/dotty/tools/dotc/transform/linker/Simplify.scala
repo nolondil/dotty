@@ -17,6 +17,7 @@ import Decorators._
 import dotty.tools.dotc.core.DenotTransformers.IdentityDenotTransformer
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 
 class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
@@ -69,34 +70,42 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
   }
 
   type Visitor = Tree => Unit
+  type ErasureCompatibility = Int
+  val BeforeErasure: ErasureCompatibility = 1
+  val AfterErasure: ErasureCompatibility  = 2
+  val BeforeAndAfterErasure: ErasureCompatibility  = BeforeErasure | AfterErasure
+
   val NoVisitor: Visitor = (_) => ()
   type Transformer = () => (Tree => Tree)
-  type Optimization = (Context) => (String, Visitor, Transformer)
+  type Optimization = (Context) => (String, ErasureCompatibility, Visitor, Transformer)
 
-  private lazy val _optimizations = Seq(inlineCaseIntrinsics, inlineLabelsCalledOnce, devalify, dropNoEffects, inlineLocalObjects, varify)
-
+  private lazy val _optimizations = Seq(inlineCaseIntrinsics, inlineLabelsCalledOnce,/* devalify,*/ dropNoEffects, inlineLocalObjects/*, varify*/)
   override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     if (!tree.symbol.is(Flags.Label)) {
       var rhs0 = tree.rhs
       var rhs1: Tree = null
+      val erasureCompatibility = if (ctx.erasedTypes) AfterErasure else BeforeErasure
       while (rhs1 ne rhs0) {
         rhs1 = rhs0
         val initialized = _optimizations.map(x =>x(ctx.withOwner(tree.symbol)))
-        var (names, visitors, transformers) = initialized.unzip3
+        var (names, erasureSupport , visitors, transformers) = unzip4(initialized)
         // todo: fuse for performance
         while (names.nonEmpty) {
           val nextVisitor = visitors.head
-          rhs0.foreachSubTree(nextVisitor)
-          val nextTransformer = transformers.head()
-          val name = names.head
-          val rhst = new TreeMap() {
-            override def transform(tree: tpd.Tree)(implicit ctx: Context): tpd.Tree = nextTransformer(super.transform(tree))
-          }.transform(rhs0)
-          if (rhst ne rhs0) println(s"${tree.symbol} after ${name} became ${rhst.show}")
-          rhs0 = rhst
-
+          val supportsErasure = erasureSupport.head
+          if ((supportsErasure & erasureCompatibility) > 0) {
+            rhs0.foreachSubTree(nextVisitor)
+            val nextTransformer = transformers.head()
+            val name = names.head
+            val rhst = new TreeMap() {
+              override def transform(tree: tpd.Tree)(implicit ctx: Context): tpd.Tree = nextTransformer(super.transform(tree))
+            }.transform(rhs0)
+            if (rhst ne rhs0) println(s"${tree.symbol} after ${name} became ${rhst.show}")
+            rhs0 = rhst
+          }
           names = names.tail
           visitors = visitors.tail
+          erasureSupport = erasureSupport.tail
           transformers = transformers.tail
         }
       }
@@ -116,7 +125,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
         a.args.head
       case t => t
     }
-    ("inlineCaseIntrinsics", NoVisitor, transformer)
+    ("inlineCaseIntrinsics", BeforeAndAfterErasure, NoVisitor, transformer)
   }}
 
   val inlineLocalObjects: Optimization = { (ctx0: Context) => {
@@ -240,7 +249,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
         }
       case t => t
     }}}
-    ("inlineLocalObjects", visitor, transformer)
+    ("inlineLocalObjects", BeforeAndAfterErasure, visitor, transformer)
   }}
 
   private def keepOnlySideEffects(t: Tree)(implicit ctx: Context): Tree = {
@@ -326,7 +335,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
         Block(keep, noth)
       case t => t
     }
-    ("bubbleUpNothing", NoVisitor, transformer)
+    ("bubbleUpNothing", BeforeAndAfterErasure, NoVisitor, transformer)
   }}
 
   val dropNoEffects: Optimization = { (ctx0: Context) => {
@@ -342,7 +351,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
         } else a
       case t => t
     }
-    ("dropNoEffects", NoVisitor, transformer)
+    ("dropNoEffects", BeforeAndAfterErasure, NoVisitor, transformer)
   }}
 
   val inlineLabelsCalledOnce: Optimization = { (ctx0: Context) => {
@@ -378,7 +387,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
         EmptyTree
       case t => t
     }
-    ("inlineLabelsCalledOnce", visitor, transformer)
+    ("inlineLabelsCalledOnce", BeforeAndAfterErasure, visitor, transformer)
   }}
 
   val devalify: Optimization = { (ctx0: Context) => {
@@ -437,38 +446,37 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
 
       transformation
     }
-    ("devalify", visitor, transformer)
+    ("devalify", BeforeAndAfterErasure, visitor, transformer)
   }}
 
   val varify: Optimization = { (ctx0: Context) => {
     implicit val ctx = ctx0
     val paramsTimesUsed = collection.mutable.HashMap[Symbol, Int]()
-    val possibleRenames = collection.mutable.HashMap[Symbol, Symbol]()
+    val possibleRenames = collection.mutable.HashMap[Symbol, Set[Symbol]]()
     val visitor: Visitor = {
       case t: ValDef
         if t.symbol.is(Flags.Param) =>
           paramsTimesUsed += (t.symbol -> 0)
-      case t: ValDef
-        if t.symbol.is(Flags.Mutable) =>
-          var referenced = false
-          var sym: Symbol = null
-          t.rhs.foreachSubTree { t =>
-            referenced |= paramsTimesUsed.contains(t.symbol)
-            if (referenced && sym == null) sym = t.symbol
-          }
-          if (sym != null) {
-            possibleRenames += (t.symbol -> sym)
+      case valDef: ValDef
+        if valDef.symbol.is(Flags.Mutable) =>
+          valDef.rhs.foreachSubTree { subtree =>
+            if (paramsTimesUsed.contains(subtree.symbol) &&
+              valDef.symbol.info.widenDealias <:< subtree.symbol.info.widenDealias) {
+              val newSet = possibleRenames.getOrElse(valDef.symbol, Set.empty) + subtree.symbol
+              possibleRenames.put(valDef.symbol, newSet)
+            }
           }
       case t: RefTree
         if paramsTimesUsed.contains(t.symbol) =>
           val param = t.symbol
           val current = paramsTimesUsed.get(param)
           current foreach { c => paramsTimesUsed += (param -> (c + 1)) }
-      case _ => ()
+      case _ =>
     }
     val transformer = () => {
       val paramCandidates = paramsTimesUsed.filter(kv => kv._2 == 1).keySet
-      val renames = possibleRenames.filter(kv => paramCandidates.contains(kv._2))
+      val renames = possibleRenames.iterator.map(kv => (kv._1, kv._2.intersect(paramCandidates))).
+        filter(x => x._2.nonEmpty).map(x => (x._1, x._2.head)).toMap
       val transformation: Tree => Tree = {
         case t: RefTree
           if renames.contains(t.symbol) =>
@@ -486,7 +494,21 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
       }
       transformation
     }
-    ("varify", visitor, transformer)
+    ("varify", AfterErasure, visitor, transformer)
   }}
 
+
+  private def unzip4[A, B, C, D](seq: Seq[(A, B, C, D)]): (Seq[A], Seq[B], Seq[C], Seq[D]) = {
+    val listBuilderA = new ListBuffer[A]()
+    val listBuilderB = new ListBuffer[B]()
+    val listBuilderC = new ListBuffer[C]()
+    val listBuilderD = new ListBuffer[D]()
+    seq.foreach{x =>
+      listBuilderA += x._1
+      listBuilderB += x._2
+      listBuilderC += x._3
+      listBuilderD += x._4
+    }
+    (listBuilderA.toList, listBuilderB.toList, listBuilderC.toList, listBuilderD.toList)
+  }
 }
