@@ -73,7 +73,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
   type Transformer = () => (Tree => Tree)
   type Optimization = (Context) => (String, Visitor, Transformer)
 
-  private lazy val _optimizations = Seq(inlineCaseIntrinsics, inlineLabelsCalledOnce, devalify, dropNoEffects, inlineLocalObjects)
+  private lazy val _optimizations = Seq(inlineCaseIntrinsics, inlineLabelsCalledOnce, devalify, dropNoEffects, inlineLocalObjects, varify)
 
   override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     if (!tree.symbol.is(Flags.Label)) {
@@ -439,4 +439,54 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
     }
     ("devalify", visitor, transformer)
   }}
+
+  val varify: Optimization = { (ctx0: Context) => {
+    implicit val ctx = ctx0
+    val paramsTimesUsed = collection.mutable.HashMap[Symbol, Int]()
+    val possibleRenames = collection.mutable.HashMap[Symbol, Symbol]()
+    val visitor: Visitor = {
+      case t: ValDef
+        if t.symbol.is(Flags.Param) =>
+          paramsTimesUsed += (t.symbol -> 0)
+      case t: ValDef
+        if t.symbol.is(Flags.Mutable) =>
+          var referenced = false
+          var sym: Symbol = null
+          t.rhs.foreachSubTree { t =>
+            referenced |= paramsTimesUsed.contains(t.symbol)
+            if (referenced && sym == null) sym = t.symbol
+          }
+          if (sym != null) {
+            possibleRenames += (t.symbol -> sym)
+          }
+      case t: RefTree
+        if paramsTimesUsed.contains(t.symbol) =>
+          val param = t.symbol
+          val current = paramsTimesUsed.get(param)
+          current foreach { c => paramsTimesUsed += (param -> (c + 1)) }
+      case _ => ()
+    }
+    val transformer = () => {
+      val paramCandidates = paramsTimesUsed.filter(kv => kv._2 == 1).keySet
+      val renames = possibleRenames.filter(kv => paramCandidates.contains(kv._2))
+      val transformation: Tree => Tree = {
+        case t: RefTree
+          if renames.contains(t.symbol) =>
+            ref(renames(t.symbol))
+        case t: ValDef
+          if renames.contains(t.symbol) =>
+            val replaced = renames(t.symbol)
+            if (t.rhs.symbol == replaced) EmptyTree
+            else ref(replaced).becomes(t.rhs)
+        case t: ValDef
+          if paramCandidates.contains(t.symbol) =>
+            t.symbol.flags = Flags.Mutable
+            t
+        case t => t
+      }
+      transformation
+    }
+    ("varify", visitor, transformer)
+  }}
+
 }
