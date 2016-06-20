@@ -383,7 +383,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
 
   /** new C(args), calling the primary constructor of C */
   def New(tp: Type, args: List[Tree])(implicit ctx: Context): Apply =
-    New(tp, tp.typeSymbol.primaryConstructor.asTerm, args)
+    New(tp, tp.widenDealias.typeSymbol.primaryConstructor.asTerm, args)
 
   /** new C(args), calling given constructor `constr` of C */
   def New(tp: Type, constr: TermSymbol, args: List[Tree])(implicit ctx: Context): Apply = {
