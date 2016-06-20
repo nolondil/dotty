@@ -1164,7 +1164,7 @@ object Trees {
         case tree @ TypeDef(name, rhs) =>
           cpy.TypeDef(tree)(name, transform(rhs), tree.tparams)
         case tree @ Template(constr, parents, self, _) =>
-          cpy.Template(tree)(transformSub(constr), transform(parents), transformSub(self), transformStats(tree.body))
+          cpy.Template(tree)(transformSub(constr), transform(parents), self, transformStats(tree.body))
         case Import(expr, selectors) =>
           cpy.Import(tree)(transform(expr), selectors)
         case PackageDef(pid, stats) =>
