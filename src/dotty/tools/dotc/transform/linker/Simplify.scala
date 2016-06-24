@@ -79,7 +79,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
   type Transformer = () => (Tree => Tree)
   type Optimization = (Context) => (String, ErasureCompatibility, Visitor, Transformer)
 
-  private lazy val _optimizations = Seq(inlineCaseIntrinsics, inlineLabelsCalledOnce,/* devalify,*/ dropNoEffects, inlineLocalObjects/*, varify*/)
+  private lazy val _optimizations = Seq(inlineCaseIntrinsics, inlineLabelsCalledOnce, devalify, dropNoEffects, inlineLocalObjects/*, varify*/)
   override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     if (!tree.symbol.is(Flags.Label)) {
       var rhs0 = tree.rhs
@@ -396,7 +396,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
     val defined = collection.mutable.HashSet[Symbol]()
     val copies = collection.mutable.HashMap[Symbol, Tree]() // either a duplicate or a read through series of immutable fields
     val visitor: Visitor = {
-      case valdef: ValDef if !valdef.symbol.is(Flags.Param) && !valdef.symbol.is(Flags.Mutable) =>
+      case valdef: ValDef if !valdef.symbol.is(Flags.Param) && !valdef.symbol.is(Flags.Mutable) && (valdef.symbol.exists && !valdef.symbol.owner.isClass) =>
         defined += valdef.symbol
 
         dropCasts(valdef.rhs) match {
@@ -404,8 +404,9 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
             copies.put(valdef.symbol, valdef.rhs)
           case _ =>
         }
-      case t: ValDef =>
-        defined += t.symbol
+      case valdef: ValDef  if valdef.symbol.exists && !valdef.symbol.owner.isClass && !valdef.symbol.is(Flags.Param) =>
+        //todo: handle params after constructors. Start changing public signatures by eliminating unused arguments.
+        defined += valdef.symbol
 
       case t: RefTree =>
         val b4 = timesUsed.getOrElseUpdate(t.symbol, 0)
@@ -434,8 +435,10 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
 
       val transformation: Tree => Tree = {
         case t: ValDef if valsToDrop.contains(t.symbol) =>
+          // println(s"droping definition of ${t.symbol.showFullName} as not used")
           t.rhs
         case t: ValDef if replacements.contains(t.symbol) =>
+          // println(s"droping definition of ${t.symbol.showFullName} as an alias")
           EmptyTree
         case t: Block => // drop non-side-effecting stats
           t
