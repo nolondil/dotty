@@ -65,4 +65,16 @@ class PatternTypeFactorization extends PatternFactorization {
     loop(cases, Nil)
   }
 
+  protected def asInnerMatch(cases: List[CaseDef])(
+    implicit ctx: Context, info: TransformerInfo): CaseDef = {
+    assert(cases.nonEmpty)
+    val tpe = cases.head.pat.tpe.widen
+    val selName = ctx.freshName("fact").toTermName
+    val factorizedSelector =
+      ctx.newSymbol(ctx.owner, selName, Flags.Synthetic | Flags.Case, tpe)
+    val selector = Ident(factorizedSelector.termRef)
+    val pattern = Bind(factorizedSelector, Typed(Underscore(factorizedSelector.info), TypeTree(factorizedSelector.info)))
+    val innerMatch = transformFollowing(Match(selector, cases))
+    CaseDef(pattern, EmptyTree, innerMatch)
+  }
 }
