@@ -389,7 +389,7 @@ class PatternMatcher extends MiniPhaseTransform with DenotTransformer {thisTrans
         }
 
         val intScrut =
-          if (pt isRef defn.IntClass) ref(scrutSym)
+          if (scrutSym.info.derivesFrom(defn.IntClass)) ref(scrutSym)
           else Select(ref(scrutSym), nme.toInt)
 
         val (normalCases, defaultCaseAndRest) = valuesToCases.span(_._1.nonEmpty)
