@@ -376,10 +376,14 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
     val transformer: Transformer = () => {
       case Block(Nil, expr) => expr
       case a: Block  =>
-        cpy.Block(a)(stats = a.stats.mapConserve(keepOnlySideEffects), a.expr)
+        val newStats = a.stats.mapConserve(keepOnlySideEffects)
+        if (newStats.nonEmpty)
+          cpy.Block(a)(stats = newStats, a.expr)
+        else a.expr
       case a: DefDef =>
-        if (a.symbol.info.finalResultType.derivesFrom(defn.UnitClass) && !a.rhs.tpe.derivesFrom(defn.UnitClass)) {
-          cpy.DefDef(a)(rhs = keepOnlySideEffects(a.rhs), tpt = tpd.TypeTree(defn.UnitType))
+        if (a.symbol.info.finalResultType.derivesFrom(defn.UnitClass) && !a.rhs.tpe.derivesFrom(defn.UnitClass) && !a.rhs.tpe.derivesFrom(defn.NothingClass)) {
+          val r = cpy.DefDef(a)(rhs = keepOnlySideEffects(a.rhs), tpt = tpd.TypeTree(defn.UnitType))
+          r
         } else a
       case t => t
     }
