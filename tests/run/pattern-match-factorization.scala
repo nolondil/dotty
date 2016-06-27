@@ -35,41 +35,42 @@ object Test {
     match2(6, true)
     match2(6, false)
 
-    def match3(e: Any, guard: Boolean = true) = e match {
-      case List(1, 2, 3) if guard => println("0")
-      case Some(x)                => println("1")
-      case List(1, 2, 3)          => println("2")
-      case List(1, 2)             => println("3")
-      case 1                      => println("4")
-      case 2                      => println("5")
-      case x :: xs if guard       => println("6")
-      case Nil                    => println("7")
-      case 2 if guard             => println("8")
-      case _: Int                 => println("9")
-      case 3                      => println("10")
-      case Some(x)                => println("11")
-      case None                   => println("12")
-    }
+    def match3(e: Any, guard: Boolean = true) =
+      try {
+        e match {
+          case List(1, 2, 3) if guard => println("0")
+          case Some(x) => println("1")
+          case List(1, 2, 3) => println("2")
+          case List(1, 2) => println("3")
+          case 1 => println("4")
+          case 2 => println("5")
+          case x :: xs if guard => println("6")
+          case Nil => println("7")
+          case 2 if guard => println("8")
+          case _: Int => println("9")
+          case 3 => println("10")
+          case Some(x) => println("11")
+          case None => println("12")
+        }
+      } catch {
+        case e: Throwable => println(e.getMessage)
+      }
 
-    println("match3")
-    match3(0)
-    match3(1)
-    match3(2)
-    match3(3)
-    match3(4)
-    match3(List(1, 2, 3))
-    match3(List(1, 2, 3), false)
-    match3(List(1, 2))
-    match3(List(3, 4, 5))
-    match3(Nil)
-    match3(Some(1))
-    match3(Some(1), false)
-    match3(Some(1))
-    try {
+      println("match3")
+      match3(0)
+      match3(1)
+      match3(2)
+      match3(3)
+      match3(4)
+      match3(List(1, 2, 3))
+      match3(List(1, 2, 3), false)
+      match3(List(1, 2))
+      match3(List(3, 4, 5))
+      match3(Nil)
+      match3(Some(1))
+      match3(Some(1), false)
+      match3(Some(1))
       match3("abc")
-    } catch {
-      case e: Throwable => println(e.getClass.getName)
-    }
 
   }
 

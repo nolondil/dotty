@@ -37,6 +37,10 @@ trait PatternFactorization extends MiniPhaseTransform {
   }
 
   override def transformMatch(tree: Match)(implicit ctx: Context, info: TransformerInfo): Tree = {
+    println(s">>> ${this.getClass.getName}.transformMatch  " + tree.selector.tpe.show + " " + tree.tpe.show)
+    println(tree.show)
+    tree.cases.foreach(println)
+    println()
     val (factoredCases, fallbackCases) = factorized(tree.cases)
     if (factoredCases.nonEmpty) {
       val selectorSym =
@@ -70,7 +74,7 @@ trait PatternFactorization extends MiniPhaseTransform {
           transformFollowing(cpy.Match(tree)(selector, newFactoredCases ++ fallbackCaseOpt))
       )
     } else {
-      tree
+      transformFollowing(tree)
     }
   }
 
@@ -91,18 +95,5 @@ trait PatternFactorization extends MiniPhaseTransform {
     } while (swapped)
 
     casesArray.toList
-  }
-
-  protected def asInnerMatch(cases: List[CaseDef])(
-      implicit ctx: Context, info: TransformerInfo): CaseDef = {
-    assert(cases.nonEmpty)
-    val tpe = cases.head.pat.tpe.widen
-    val selName = ctx.freshName("fact").toTermName
-    val factorizedSelector =
-      ctx.newSymbol(ctx.owner, selName, Flags.Synthetic | Flags.Case, tpe)
-    val selector = Ident(factorizedSelector.termRef)
-    val pattern = Bind(factorizedSelector, Underscore(factorizedSelector.info))
-    val innerMatch = transformFollowing(Match(selector, cases))
-    CaseDef(pattern, EmptyTree, innerMatch)
   }
 }
