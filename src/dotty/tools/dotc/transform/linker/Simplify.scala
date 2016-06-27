@@ -82,7 +82,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
   type Optimization = (Context) => (String, ErasureCompatibility, Visitor, Transformer)
 
   private lazy val _optimizations: Seq[Optimization] =
-    Seq(inlineCaseIntrinsics, inlineLabelsCalledOnce, devalify,
+    Seq(bubbleUpNothing, inlineCaseIntrinsics, inlineLabelsCalledOnce, devalify,
       dropNoEffects, inlineLocalObjects/*, varify*/, constantFold)
   override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     if (!tree.symbol.is(Flags.Label)) {
@@ -357,14 +357,15 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
     val transformer: Transformer = () => {
       case Apply(Select(qual, _), args)  if qual.tpe.derivesFrom(defn.NothingClass) => qual
       case Apply(Select(qual, _), args)  if args.exists(x => x.tpe.derivesFrom(defn.NothingClass)) =>
-        val (keep, noth:: other) = args.span(x => !x.tpe.derivesFrom(defn.NothingClass))
+        val (keep, noth :: other) = args.span(x => !x.tpe.derivesFrom(defn.NothingClass))
         Block(qual :: keep, noth)
       case Assign(_, rhs) if rhs.tpe.derivesFrom(defn.NothingClass) =>
         rhs
       case If(cond, _, _) if cond.tpe.derivesFrom(defn.NothingClass) => cond
       case a: Block if a.stats.exists(x => x.tpe.derivesFrom(defn.NothingClass))  =>
         val (keep, noth:: other) = a.stats.span(x => !x.tpe.derivesFrom(defn.NothingClass))
-        Block(keep, noth)
+        val keep2 = other.filter(x => x.isDef)
+        Block(keep ::: keep2, noth)
       case t => t
     }
     ("bubbleUpNothing", BeforeAndAfterErasure, NoVisitor, transformer)
