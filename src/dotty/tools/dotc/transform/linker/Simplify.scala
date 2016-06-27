@@ -467,7 +467,26 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
           })
 
 
-      val replacements = copiesToReplaceAsDuplicates ++ copiesToReplaceAsUsedOnce
+      val replacements0 = copiesToReplaceAsDuplicates ++ copiesToReplaceAsUsedOnce
+
+      def mapRef(t: RefTree): Tree = {
+        if (!t.symbol.is(Flags.Method) && !t.symbol.is(Flags.Param) && !t.symbol.is(Flags.Mutable) && replacements0.contains(t.symbol))
+          replacements0(t.symbol)
+        else t
+      }
+
+      val tmap0 = new TreeMap() {
+        override def transform(tree: tpd.Tree)(implicit ctx: Context): tpd.Tree = super.transform(tree match {
+          case t: RefTree =>
+            val r = mapRef(t)
+            if (r ne t) transform(r)
+            else t
+          case _ => tree
+        })
+      }
+
+      // replacements0 can contain replaced symbols in its right hand sides. need to map them first.
+      val replacements = replacements0.map(x => (x._1, tmap0.transform(x._2)))
 
       val transformation: Tree => Tree = {
         case t: ValDef if valsToDrop.contains(t.symbol) =>
@@ -476,8 +495,6 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
         case t: ValDef if replacements.contains(t.symbol) =>
           // println(s"droping definition of ${t.symbol.showFullName} as an alias")
           EmptyTree
-        case t: Block => // drop non-side-effecting stats
-          t
         case t: RefTree if !t.symbol.is(Flags.Method) && !t.symbol.is(Flags.Param) && !t.symbol.is(Flags.Mutable) =>
           replacements.getOrElse(t.symbol, t)
         case tree => tree
