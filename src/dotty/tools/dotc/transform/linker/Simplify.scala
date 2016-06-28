@@ -11,9 +11,11 @@ import Symbols._
 import dotty.tools.dotc.core.Phases.Phase
 import dotty.tools.dotc.core.Types.{ConstantType, ExprType, MethodType, NoPrefix, TermRef, ThisType}
 import dotty.tools.dotc.transform.{Erasure, TreeTransforms}
-import dotty.tools.dotc.transform.TreeTransforms.{MiniPhaseTransform, TransformerInfo}
+import dotty.tools.dotc.transform.TreeTransforms.{MiniPhaseTransform, TransformerInfo, TreeTransform}
 import dotty.tools.dotc.transform.SymUtils._
 import Decorators._
+import dotty.tools.dotc.backend.jvm.DottyPrimitives
+import dotty.tools.dotc.core.Constants.Constant
 import dotty.tools.dotc.core.DenotTransformers.IdentityDenotTransformer
 import dotty.tools.dotc.typer.ConstFold
 
@@ -26,6 +28,13 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
   import tpd._
 
   override def phaseName: String = "simplify"
+  private var symmetricOperations: Set[Symbol] = null
+
+
+  override def prepareForUnit(tree: tpd.Tree)(implicit ctx: Context): TreeTransform = {
+    symmetricOperations = Set(defn.Boolean_&&, defn.Boolean_||, defn.Int_+, defn.Int_*, defn.Long_+, defn.Long_*, defn.String_+)
+    this
+  }
 
   private def desugarIdent(i: Ident)(implicit ctx: Context): Option[tpd.Select] = {
     i.tpe match {
@@ -104,7 +113,7 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
             val rhst = new TreeMap() {
               override def transform(tree: tpd.Tree)(implicit ctx: Context): tpd.Tree = nextTransformer(super.transform(tree))
             }.transform(rhs0)
-            if (rhst ne rhs0) println(s"${tree.symbol} after ${name} became ${rhst.show}")
+//            if (rhst ne rhs0) println(s"${tree.symbol} after ${name} became ${rhst.show}")
             rhs0 = rhst
           }
           names = names.tail
@@ -134,23 +143,65 @@ class Simplify extends MiniPhaseTransform with IdentityDenotTransformer {
 
   val constantFold: Optimization = { (ctx0: Context) => {
     implicit val ctx = ctx0
-    val transformer: Transformer = () => {
+    def preEval(t: Tree) = {
+      if (t.isInstanceOf[Literal]) t else {
+        val s = ConstFold.apply(t)
+        if ((s ne null) && s.tpe.isInstanceOf[ConstantType]) {
+          val constant = s.tpe.asInstanceOf[ConstantType].value
+          Literal(constant)
+        } else t
+      }
+    }
+    val transformer: Transformer = () => { x => preEval(x) match {
+      // TODO: include handling of isInstanceOf similar to one in IsInstanceOfEvaluator
       case If(t: Literal, thenp, elsep) =>
         if (t.const.booleanValue) thenp
         else elsep
-      case t: Literal => t
+      case If(t@ Select(recv, _), thenp, elsep) if t.symbol eq defn.Boolean_! =>
+        tpd.If(recv, elsep, thenp)
+      case If(t@ Apply(Select(recv, _), Nil), thenp, elsep) if t.symbol eq defn.Boolean_! =>
+        tpd.If(recv, elsep, thenp)
+        // todo: similar trick for comparions.
+        // todo: handle comparison with min\max values
+      case t@Apply(Select(lhs, _), List(rhs)) =>
+        val sym = t.symbol
+        (lhs, rhs) match {
+          case (lhs, Literal(_)) if !lhs.isInstanceOf[Literal] && symmetricOperations.contains(sym) =>
+            rhs.select(sym).appliedTo(lhs)
+          case (l , _) if (sym == defn.Boolean_&&) && l.tpe.isInstanceOf[ConstantType]  =>
+            val const = l.tpe.asInstanceOf[ConstantType].value.booleanValue
+            if (const) Block(lhs :: Nil, rhs)
+            else l
+          case (l: Literal, _) if (sym == defn.Boolean_||) && l.tpe.isInstanceOf[ConstantType]   =>
+            val const = l.tpe.asInstanceOf[ConstantType].value.booleanValue
+            if (l.const.booleanValue) l
+            else Block(lhs :: Nil, rhs)
+          case (Literal(Constant(1)), _)    if sym == defn.Int_*  => rhs
+          case (Literal(Constant(0)), _)    if sym == defn.Int_+  => rhs
+          case (Literal(Constant(1L)), _)   if sym == defn.Long_* => rhs
+          case (Literal(Constant(0L)), _)   if sym == defn.Long_+ => rhs
+            // todo: same for float, double, short
+            // todo: empty string concat
+            // todo: disctribute & reorder constants
+            // todo: merge subsequent casts
+          case (_, Literal(Constant(1)))    if sym == defn.Int_/  => lhs
+          case (_, Literal(Constant(1L)))   if sym == defn.Long_/ => lhs
+          case (_, Literal(Constant(0)))    if sym == defn.Int_/  =>
+            Block(List(lhs),
+              ref(defn.throwMethod).appliedTo(tpd.New(defn.ArithmeticExceptionClass.typeRef, defn.ArithmeticExceptionClass_stringConstructor, Literal(Constant("/ by zero")) :: Nil)))
+          case (_, Literal(Constant(0L)))  if sym == defn.Long_/ =>
+            Block(List(lhs),
+              ref(defn.throwMethod).appliedTo(tpd.New(defn.ArithmeticExceptionClass.typeRef, defn.ArithmeticExceptionClass_stringConstructor, Literal(Constant("/ by zero")) :: Nil)))
+          case _ => t
+        }
       case t: Match if (t.selector.tpe.isInstanceOf[ConstantType] && t.cases.forall(x => x.pat.tpe.isInstanceOf[ConstantType] || (tpd.isWildcardArg(x.pat) && x.guard.isEmpty))) =>
         val selectorValue = t.selector.tpe.asInstanceOf[ConstantType].value
         val better = t.cases.find(x => tpd.isWildcardArg(x.pat) || (x.pat.tpe.asInstanceOf[ConstantType].value eq selectorValue))
         if (better.nonEmpty) better.get.body
         else t
       case t =>
-        val s = ConstFold.apply(t)
-        if ((s ne null) && s.tpe.isInstanceOf[ConstantType]) {
-          val constant = s.tpe.asInstanceOf[ConstantType].value
-          Literal(constant)
-        } else t
-    }
+        t
+    }}
     ("constantFold", BeforeAndAfterErasure, NoVisitor, transformer)
   }}
 
