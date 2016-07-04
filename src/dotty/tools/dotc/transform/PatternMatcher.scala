@@ -929,7 +929,7 @@ class PatternMatcher extends MiniPhaseTransform with DenotTransformer {thisTrans
       }
 
       val cond = renderCondition(treeCondStrategy)
-      val res  = codegen._asInstanceOf(testedBinder, nextBinderTp)
+      val res  = codegen._asInstanceOf(testedBinder, expectedTp)
 
       // is this purely a type test, e.g. no outer check, no equality tests (used in switch emission)
       //def isPureTypeTest = renderCondition(pureTypeTestChecker)
