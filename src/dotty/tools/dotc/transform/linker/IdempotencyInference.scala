@@ -18,7 +18,7 @@ import java.util
 import Names._
 import dotty.tools.dotc.core.Constants.Constant
 import dotty.tools.dotc.core.Phases.Phase
-import dotty.tools.dotc.transform.{Splitter, TreeTransforms}
+import dotty.tools.dotc.transform.{Erasure, Splitter, TreeTransforms}
 import dotty.tools.dotc.transform.TreeTransforms.{MiniPhaseTransform, TransformerInfo, TreeTransform}
 
 import scala.collection.JavaConversions
@@ -47,7 +47,7 @@ class IdempotencyInference extends MiniPhaseTransform with IdentityDenotTransfor
           calls += t.symbol
       case _ =>
     }
-
+    if (tree.rhs.isEmpty || tree.symbol.isSetter) calls += defn.throwMethod
     collectedCalls.put(tree.symbol, calls)
     tree
   }
@@ -60,9 +60,11 @@ class IdempotencyInference extends MiniPhaseTransform with IdentityDenotTransfor
       collectedCalls.foreach { case (defn, calls) =>
           if (!inferredIdempotent(defn)) {
             if (calls.forall(isIdempotentRef)) {
-              changed = true
-              inferredIdempotent += defn
-              println(s"Inferred ${defn.showFullName} idempotent")
+              if ((!defn.symbol.isConstructor) || (defn.symbol.owner.isValueClass || defn.symbol.owner.is(Flags.Module))) {
+                changed = true
+                inferredIdempotent += defn
+                println(s"Inferred ${defn.showFullName} idempotent")
+              }
             }
           }
       }
@@ -77,6 +79,11 @@ class IdempotencyInference extends MiniPhaseTransform with IdentityDenotTransfor
     if ((sym hasAnnotation defn.IdempotentAnnot) || inferredIdempotent(sym)) true // @Idempotent
     else if (sym is Lazy) true // lazy val and singleton objects
     else if (!(sym is Mutable) && !(sym is Method)) true // val
+    else if (sym.maybeOwner.isPrimitiveValueClass) true
+    else if (sym == defn.Object_ne || sym == defn.Object_eq) true
+    else if (sym == defn.Any_getClass || sym == defn.Any_asInstanceOf || sym == defn.Any_isInstanceOf) true
+    else if (Erasure.Boxing.isBox(sym) ||  Erasure.Boxing.isUnbox(sym)) true
+    else if (sym.isPrimaryConstructor && sym.owner.is(Flags.Module)) true
     else sym.isGetter && !(sym is Mutable)
   }
 
