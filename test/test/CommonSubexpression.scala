@@ -64,6 +64,21 @@ object CommonSubexpression {
     d - c
   }
 
+  def method7: Int = {
+    val a = (1,1)
+    val c = 3 + a._1
+    val d = a._1 + 3
+    assert(c == 4)
+    assert(d == 4)
+    d - c
+  }
+
+  def method8: Boolean = {
+    val a = 1 <= 2
+    val b = 1 <= 3
+    a && b
+  }
+
   def main(args: Array[String]): Unit = {
     println("executing")
     assert(method1 == 1)
@@ -71,7 +86,8 @@ object CommonSubexpression {
     assert(method3 == 1)
     assert(method4 == 1)
     assert(method5 == 2)
-    //assert(method6 == 1)
+    assert(method6 == 1)
+    assert(method7 == true)
   }
 
 }

@@ -127,17 +127,20 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
           case Some(idempotent) =>
             if (debug) println(s"PROCESSING $tree")
             val allSubTrees = IdempotentTrees.allIdempotentTrees(idempotent)
-            cached += tree -> allSubTrees
-            orderExploration += tree
-            allSubTrees.foreach { st =>
-              val tree = st.tree
-              analyzed += tree
-              val current = appearances.getOrElse(st, 0)
-              appearances += st -> (current + 1)
-              // Subscribe all the trees interested in the optimization for idem
-              val targets = subscribedTargets.getOrElse(st, emptyMutableSet)
-              subscribedTargets += (st -> (targets += st.tree))
-            }
+            if (allSubTrees.nonEmpty) {
+              cached += tree -> allSubTrees
+              orderExploration += tree
+              allSubTrees.foreach { st =>
+                val tree = st.tree
+                println(s"SUB TREE IS: $tree")
+                analyzed += tree
+                val current = appearances.getOrElse(st, 0)
+                appearances += st -> (current + 1)
+                // Subscribe all the trees interested in the optimization for idem
+                val targets = subscribedTargets.getOrElse(st, emptyMutableSet)
+                subscribedTargets += (st -> (targets += st.tree))
+              }
+            } else println(s"HAAAAAAAAAAAAAAAAAAAA $tree")
 
           case _ =>
         }
@@ -266,7 +269,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
           hostsOfOptimizations -= enclosingTree.symbol
           if (optimizedValDefs.nonEmpty) {
             if (debug) println(s"introducing ${optimizedValDefs.map(_.show)}")
-            tpd.Thicket(optimizedValDefs ::: List(enclosingTree))
+            tpd.Thicket(optimizedValDefs.reverse ::: List(enclosingTree))
           } else enclosingTree
 
         case tree =>
@@ -348,13 +351,23 @@ object IdempotentTrees {
   /** Collects all the idempotent sub trees, including the original tree. */
   def allIdempotentTrees(t1: IdempotentTree)(
       implicit ctx: Context): List[IdempotentTree] = {
+    def validTreeInsideSelect(tree: Tree) = tree match {
+      case Ident(_) =>
+        val sym = tree.symbol
+        val isMethod = sym.is(Flags.Method)
+        !isMethod || (isMethod && sym.info.paramNamess.forall(_.isEmpty))
+      case Literal(_) | This(_) | EmptyTree => false
+      case _ => true
+    }
     // TODO: Pending to remove Typed casts to remove comparison failures
     def collect(tree: Tree): List[IdempotentTree] =
       tree match {
-        case Ident(_) | This(_) | EmptyTree | Literal(_) => Nil
+        case Ident(_) | Literal(_) | This(_) | EmptyTree => Nil
         case Super(_, _) => List(IdempotentTrees(tree))
         case Select(qual, _) =>
-          IdempotentTrees(tree) :: collect(qual)
+          val collected = collect(qual)
+          if (validTreeInsideSelect(qual)) IdempotentTrees(tree) :: collected
+          else collected
         case TypeApply(fn, _) =>
           IdempotentTrees(tree) :: collect(fn)
         case Apply(fn, args) =>

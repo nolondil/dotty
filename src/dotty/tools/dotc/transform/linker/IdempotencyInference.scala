@@ -83,7 +83,7 @@ class IdempotencyInference extends MiniPhaseTransform with IdentityDenotTransfor
     else if (sym.maybeOwner.isPrimitiveValueClass) true
     else if (sym == defn.Object_ne || sym == defn.Object_eq) true
     else if (sym == defn.Any_getClass || sym == defn.Any_asInstanceOf || sym == defn.Any_isInstanceOf) true
-    else if (Erasure.Boxing.isBox(sym) ||  Erasure.Boxing.isUnbox(sym)) true
+    else if (Erasure.Boxing.isBox(sym) || Erasure.Boxing.isUnbox(sym)) true
     else if (sym.isPrimaryConstructor && sym.owner.is(Flags.Module)) true
     else sym.isGetter && !(sym is Mutable)
   }
