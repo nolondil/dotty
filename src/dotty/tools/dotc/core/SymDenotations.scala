@@ -2,16 +2,29 @@ package dotty.tools
 package dotc
 package core
 
-import Periods._, Contexts._, Symbols._, Denotations._, Names._, NameOps._, Annotations._
-import Types._, Flags._, Decorators._, DenotTransformers._, StdNames._, Scopes._
+import Periods._
+import Contexts._
+import Symbols._
+import Denotations._
+import Names._
+import NameOps._
+import Annotations._
+import Types._
+import Flags._
+import Decorators._
+import DenotTransformers._
+import StdNames._
+import Scopes._
 import NameOps._
 import Scopes.Scope
+
 import collection.mutable
 import collection.immutable.BitSet
 import scala.reflect.io.AbstractFile
 import Decorators.SymbolIteratorDecorator
 import ast._
-import annotation.tailrec
+
+import annotation.{Idempotent, tailrec}
 import CheckRealizable._
 import util.SimpleMap
 import util.Stats
@@ -132,6 +145,7 @@ object SymDenotations {
     def maybeOwner: Symbol = if (exists) owner else NoSymbol
 
     /** The flag set */
+    @Idempotent
     final def flags(implicit ctx: Context): FlagSet = { ensureCompleted(); myFlags }
 
     /** The flag set without forcing symbol completion.
@@ -159,6 +173,7 @@ object SymDenotations {
     }
 
     /** Has this denotation one of the flags in `fs` set? */
+    @Idempotent
     final def is(fs: FlagSet)(implicit ctx: Context) = {
       (if (fs <= FromStartFlags) myFlags else flags) is fs
     }
@@ -166,16 +181,19 @@ object SymDenotations {
     /** Has this denotation one of the flags in `fs` set, whereas none of the flags
      *  in `butNot` are set?
      */
+    @Idempotent
     final def is(fs: FlagSet, butNot: FlagSet)(implicit ctx: Context) =
       (if (fs <= FromStartFlags && butNot <= FromStartFlags) myFlags else flags) is (fs, butNot)
 
     /** Has this denotation all of the flags in `fs` set? */
+    @Idempotent
     final def is(fs: FlagConjunction)(implicit ctx: Context) =
       (if (fs <= FromStartFlags) myFlags else flags) is fs
 
     /** Has this denotation all of the flags in `fs` set, whereas none of the flags
      *  in `butNot` are set?
      */
+    @Idempotent
     final def is(fs: FlagConjunction, butNot: FlagSet)(implicit ctx: Context) =
       (if (fs <= FromStartFlags && butNot <= FromStartFlags) myFlags else flags) is (fs, butNot)
 
@@ -183,6 +201,7 @@ object SymDenotations {
      *  The info is an instance of TypeType iff this is a type denotation
      *  Uncompleted denotations set myInfo to a LazyType.
      */
+    @Idempotent
     final def info(implicit ctx: Context): Type = myInfo match {
       case myInfo: LazyType => completeFrom(myInfo); info
       case _ => myInfo
@@ -308,6 +327,7 @@ object SymDenotations {
     final def completer: LazyType = myInfo.asInstanceOf[LazyType]
 
     /** Make sure this denotation is completed */
+    @Idempotent
     final def ensureCompleted()(implicit ctx: Context): Unit = info
 
     /** The symbols defined in this class or object.

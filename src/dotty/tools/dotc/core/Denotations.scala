@@ -2,7 +2,7 @@ package dotty.tools
 package dotc
 package core
 
-import SymDenotations.{ SymDenotation, ClassDenotation, NoDenotation, NotDefinedHereDenotation }
+import SymDenotations.{ClassDenotation, NoDenotation, NotDefinedHereDenotation, SymDenotation}
 import Contexts.{Context, ContextBase}
 import Names.{Name, PreName}
 import Names.TypeName
@@ -19,8 +19,11 @@ import printing.Printer
 import io.AbstractFile
 import config.Config
 import util.common._
+
 import collection.mutable.ListBuffer
 import Decorators.SymbolIteratorDecorator
+
+import scala.annotation.Idempotent
 
 /** Denotations represent the meaning of symbols and named types.
  *  The following diagram shows how the principal types of denotations
@@ -102,6 +105,7 @@ object Denotations {
   abstract class Denotation(val symbol: Symbol) extends util.DotClass with printing.Showable {
 
     /** The type info of the denotation, exists only for non-overloaded denotations */
+    @Idempotent
     def info(implicit ctx: Context): Type
 
     /** The type info, or, if this is a SymDenotation where the symbol
@@ -428,6 +432,7 @@ object Denotations {
    */
   case class MultiDenotation(denot1: Denotation, denot2: Denotation) extends Denotation(NoSymbol) {
     final def infoOrCompleter = multiHasNot("info")
+    @Idempotent
     final def info(implicit ctx: Context) = infoOrCompleter
     final def validFor = denot1.validFor & denot2.validFor
     final def isType = false
@@ -885,6 +890,7 @@ object Denotations {
 
   abstract class NonSymSingleDenotation(symbol: Symbol) extends SingleDenotation(symbol) {
     def infoOrCompleter: Type
+    @Idempotent
     def info(implicit ctx: Context) = infoOrCompleter
     def isType = infoOrCompleter.isInstanceOf[TypeType]
   }

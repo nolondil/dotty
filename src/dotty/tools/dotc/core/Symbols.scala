@@ -7,6 +7,7 @@ import Names._
 import Scopes._
 import Flags._
 import java.lang.AssertionError
+
 import Decorators._
 import Symbols._
 import Contexts._
@@ -22,11 +23,15 @@ import NameOps._
 import ast.tpd.Tree
 import ast.TreeTypeMap
 import Constants.Constant
-import Denotations.{ Denotation, SingleDenotation, MultiDenotation }
+import Denotations.{Denotation, MultiDenotation, SingleDenotation}
+
 import collection.mutable
 import io.AbstractFile
+
 import language.implicitConversions
-import util.{NoSource, DotClass}
+import util.{DotClass, NoSource}
+
+import scala.annotation.Idempotent
 
 /** Creation methods for symbols */
 trait Symbols { this: Context =>
@@ -380,6 +385,7 @@ object Symbols {
     private[core] def denot_=(d: SymDenotation) =
       lastDenot = d
 
+    @Idempotent
     /** The current denotation of this symbol */
     final def denot(implicit ctx: Context): SymDenotation = {
       var denot = lastDenot

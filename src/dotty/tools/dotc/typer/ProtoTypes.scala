@@ -4,18 +4,27 @@ package typer
 
 import core._
 import ast._
-import Contexts._, Types._, Flags._, Denotations._, Names._, StdNames._, NameOps._, Symbols._
+import Contexts._
+import Types._
+import Flags._
+import Denotations._
+import Names._
+import StdNames._
+import NameOps._
+import Symbols._
 import Trees._
 import Constants._
 import Scopes._
-import annotation.unchecked
+
+import annotation.{Idempotent, unchecked}
 import util.Positions._
-import util.{Stats, SimpleMap}
+import util.{SimpleMap, Stats}
 import util.common._
 import Decorators._
 import Uniques._
 import ErrorReporting.errorType
 import config.Printers._
+
 import collection.mutable
 
 object ProtoTypes {
@@ -104,6 +113,7 @@ object ProtoTypes {
       }
     }
 
+    @Idempotent
     def underlying(implicit ctx: Context) = WildcardType
 
     def derivedSelectionProto(name: Name, memberProto: Type, compat: Compatibility)(implicit ctx: Context) =
