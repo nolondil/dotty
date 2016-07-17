@@ -5,14 +5,10 @@ import TreeTransforms._
 import core._
 import Symbols._
 import Contexts._
-import Types._
-import Flags._
 import ast.Trees._
 import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.transform.IdempotentTree.IdempotentTree
 import dotty.tools.dotc.transform.linker.IdempotencyInference
-
-import scala.annotation.tailrec
 
 /** This phase performs Common Subexpression Elimination (CSE) that
   * precomputes an expression into a new variable when it's used
@@ -53,10 +49,6 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
   private final val debug = true
 
   override def runsAfter = Set(classOf[ElimByName], classOf[IdempotencyInference])
-
-
-
-
 
   /* Imitate `Simplify` structure for the moment being */
   type Visitor = Tree => Unit
@@ -178,12 +170,14 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
         val cs = itrees.iterator
           .map(itree => itree -> appearances(itree))
           .filter(_._2 > 1).toList
-        // Make sure to optimize the longest common subexpression
-        cs.tail.foldLeft(List(cs.head)) { (parents, child) => {
+        if (cs.nonEmpty) {
+          // Make sure to optimize the longest common subexpression
+          cs.tail.foldLeft(List(cs.head)) { (parents, child) => {
             val parent = parents.head
             if (child._2 == parent._2) parents
             else child :: parents
-        }}
+          }}
+        } else Nil
       }).toList
 
       /* Perform optimization, add to optimized and return `ValDef` */
@@ -217,24 +211,27 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       (candidatesBatches zip topLevelIdempotentParents).foreach { pair =>
         val (itrees, parent) = pair
         val onlyTrees = itrees.map(_._1)
-        val firstChild = onlyTrees.head
-        val defn = rhsToDefinitions(parent)
+        // TODO: Check why this check is necessary
+        if (onlyTrees.nonEmpty) {
+          val firstChild = onlyTrees.head
+          val defn = rhsToDefinitions(parent)
 
-        if (!optimized.contains(firstChild)) {
-          val firstValDef = optimize(firstChild)
-          prepareTargets(firstChild, firstChild)
-          registerValDef(firstValDef, defn)
-        }
+          if (!optimized.contains(firstChild)) {
+            val firstValDef = optimize(firstChild)
+            prepareTargets(firstChild, firstChild)
+            registerValDef(firstValDef, defn)
+          }
 
-        onlyTrees.tail.foldLeft(firstChild) { (optimizedChild, itree) =>
-          val (_, ref) = optimized(optimizedChild)
-          val replaced = IdempotentTree.replace(itree, optimizedChild, ref)
-          if (!optimized.contains(replaced)) {
-            val valDef = optimize(replaced)
-            prepareTargets(itree, replaced)
-            registerValDef(valDef, defn)
-            replaced
-          } else replaced
+          onlyTrees.tail.foldLeft(firstChild) { (optimizedChild, itree) =>
+            val (_, ref) = optimized(optimizedChild)
+            val replaced = IdempotentTree.replace(itree, optimizedChild, ref)
+            if (!optimized.contains(replaced)) {
+              val valDef = optimize(replaced)
+              prepareTargets(itree, replaced)
+              registerValDef(valDef, defn)
+              replaced
+            } else replaced
+          }
         }
       }
 
@@ -256,8 +253,10 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
           // Introduce new val defs for this enclosing tree
           val optimizedValDefs = hostsOfOptimizations(enclosingTree.symbol)
           hostsOfOptimizations -= enclosingTree.symbol
-          if (debug && optimizedValDefs.nonEmpty) println(s"introducing ${optimizedValDefs.map(_.show)}")
-          tpd.Thicket(optimizedValDefs ::: List(enclosingTree))
+          if (optimizedValDefs.nonEmpty) {
+            if (debug) println(s"introducing ${optimizedValDefs.map(_.show)}")
+            tpd.Thicket(optimizedValDefs ::: List(enclosingTree))
+          } else enclosingTree
 
         case tree =>
           toSubstitute.get(tree) match {

@@ -81,16 +81,19 @@ class IdempotencyInference extends MiniPhaseTransform with IdentityDenotTransfor
   }
 
   def isIdempotent(tree: Tree)(implicit ctx: Context): Boolean = {
-
-    tree match {
-      case EmptyTree | This(_) | Super(_, _) | Literal(_) => true
-      case Ident(_) => isIdempotentRef(tree.symbol)
-      case Select(qual, _) => isIdempotent(qual) && isIdempotentRef(tree.symbol)
-      case TypeApply(fn, _) => isIdempotent(fn)
-      case Apply(fn, args) => isIdempotent(fn) && (args forall isIdempotent)
-      case Typed(expr, _) => isIdempotent(expr)
-      case _ => false
+    def loop(tree: Tree, isTopLevel: Boolean = false) = {
+      tree match {
+        case This(_) | Super(_, _) => true
+        case EmptyTree | Literal(_) if !isTopLevel=> true
+        case Ident(_) if !isTopLevel => isIdempotentRef(tree.symbol)
+        case Select(qual, _) => isIdempotent(qual) && isIdempotentRef(tree.symbol)
+        case TypeApply(fn, _) => isIdempotent(fn)
+        case Apply(fn, args) => isIdempotent(fn) && (args forall isIdempotent)
+        case Typed(expr, _) => isIdempotent(expr)
+        case _ => false
+      }
     }
+    loop(tree, isTopLevel = true)
   }
 }
 
