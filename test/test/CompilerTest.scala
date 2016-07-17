@@ -1,10 +1,8 @@
 package test
 
-import dotty.tools.dotc.core.Contexts._
 import dotty.partest.DPConfig
 import dotty.tools.dotc.{Main, Bench, Driver}
-import dotty.tools.dotc.interfaces.Diagnostic.ERROR
-import dotty.tools.dotc.reporting._
+import dotty.tools.dotc.reporting.Reporter
 import dotty.tools.dotc.util.SourcePosition
 import dotty.tools.dotc.config.CompilerCommand
 import dotty.tools.io.PlainFile
@@ -13,6 +11,8 @@ import scala.reflect.io.{ Path, Directory, File => SFile, AbstractFile }
 import scala.tools.partest.nest.{ FileManager, NestUI }
 import scala.annotation.tailrec
 import java.io.{ RandomAccessFile, File => JFile }
+
+import org.junit.Test
 
 
 /** This class has two modes: it can directly run compiler tests, or it can
@@ -234,22 +234,7 @@ abstract class CompilerTest {
       (implicit defaultOptions: List[String]): Unit = {
     val allArgs = args ++ defaultOptions
     val processor = if (allArgs.exists(_.startsWith("#"))) Bench else Main
-    val storeReporter = new Reporter with UniqueMessagePositions with HideNonSensicalMessages {
-      private val consoleReporter = new ConsoleReporter()
-      private var innerStoreReporter = new StoreReporter(consoleReporter)
-      def doReport(d: Diagnostic)(implicit ctx: Context): Unit = {
-        if (innerStoreReporter == null) {
-          consoleReporter.report(d)
-        } else {
-          innerStoreReporter.report(d)
-          if (d.level == ERROR) {
-            innerStoreReporter.flush()
-            innerStoreReporter = null
-          }
-        }
-      }
-    }
-    val reporter = processor.process(allArgs, storeReporter)
+    val reporter = processor.process(allArgs)
 
     val nerrors = reporter.errorCount
     val xerrors = (expectedErrorsPerFile map {_.totalErrors}).sum
@@ -259,7 +244,7 @@ abstract class CompilerTest {
       }
     assert(nerrors == xerrors,
       s"""Wrong # of errors. Expected: $xerrors, found: $nerrors
-         |Files with expected errors: $expectedErrorFiles
+         |Files with expected errors: $expectedErrorFiles%, %
        """.stripMargin)
     // NEG TEST
     if (xerrors > 0) {
