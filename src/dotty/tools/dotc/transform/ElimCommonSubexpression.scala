@@ -351,8 +351,9 @@ object IdempotentTrees {
         case TypeApply(fn, _) =>
           IdempotentTrees(tree) :: collect(fn)
         case Apply(fn, args) =>
-          var branched = args.map(collect(_))
-          if (branched.nonEmpty) branched = branched.reduce(_ ++ _)
+          val collected = args.map(collect(_))
+          val branched =
+            if (collected.nonEmpty) collected.reduce(_ ++ _) else List()
           IdempotentTrees(tree) :: collect(fn) ::: branched
         case Typed(expr, _) =>
           IdempotentTrees(tree) :: collect(expr)
