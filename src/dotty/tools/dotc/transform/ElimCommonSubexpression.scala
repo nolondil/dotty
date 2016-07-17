@@ -7,7 +7,7 @@ import Symbols._
 import Contexts._
 import ast.Trees._
 import dotty.tools.dotc.ast.tpd
-import dotty.tools.dotc.transform.IdempotentTree.IdempotentTree
+import dotty.tools.dotc.transform.IdempotentTrees.IdempotentTree
 import dotty.tools.dotc.transform.linker.IdempotencyInference
 
 /** This phase performs Common Subexpression Elimination (CSE) that
@@ -84,7 +84,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
   type Optimized = (ValDef, Tree)
 
   def elimCommonSubexpression: Optimization = (ctx0: Context) => {
-    implicit val ctx = ctx0
+    implicit val ctx: Context = ctx0
 
     import collection.mutable
 
@@ -122,9 +122,9 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
         // This avoids visiting unnecessary Idempotent instances
 
       case tree: Tree if !analyzed.contains(tree) =>
-        IdempotentTree.from(tree) match {
+        IdempotentTrees.from(tree) match {
           case Some(idempotent) =>
-            val allSubTrees = IdempotentTree.allIdempotentTrees(idempotent)
+            val allSubTrees = IdempotentTrees.allIdempotentTrees(idempotent)
             cached += tree -> allSubTrees
             orderExploration += tree
             allSubTrees.foreach { st =>
@@ -224,7 +224,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
           onlyTrees.tail.foldLeft(firstChild) { (optimizedChild, itree) =>
             val (_, ref) = optimized(optimizedChild)
-            val replaced = IdempotentTree.replace(itree, optimizedChild, ref)
+            val replaced = IdempotentTrees.replace(itree, optimizedChild, ref)
             if (!optimized.contains(replaced)) {
               val valDef = optimize(replaced)
               prepareTargets(itree, replaced)
@@ -264,7 +264,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
             case None =>
               /* We need to check if it's idempotent again because sub trees
                * may have changed/optimized and tree equality doesn't hold */
-              IdempotentTree.from(tree) match {
+              IdempotentTrees.from(tree) match {
                 case Some(itree) =>
                   val ret = changeReference(itree, tree)
                   if (debug && (ret ne tree)) println(s"rewriting ${tree.show} to ${ret.show}")
@@ -280,7 +280,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
   }
 }
 
-object IdempotentTree {
+object IdempotentTrees {
 
   import ast.tpd._
 
@@ -341,19 +341,19 @@ object IdempotentTree {
         case EmptyTree | This(_) | Super(_, _) | Literal(_) | Ident(_) => Nil
         case Select(qual, _) =>
           if (isTopTree)
-            IdempotentTree(tree) :: collect(isTopTree = false, qual)
+            IdempotentTrees(tree) :: collect(isTopTree = false, qual)
           else collect(isTopTree, qual)
         case TypeApply(fn, _) =>
-          if (isTopTree) IdempotentTree(tree) :: collect(isTopTree = false, fn)
+          if (isTopTree) IdempotentTrees(tree) :: collect(isTopTree = false, fn)
           else collect(isTopTree, fn)
         case Apply(fn, args) =>
           val branched = args.map(collect(true, _)).reduce(_ ++ _)
           if (isTopTree)
-            IdempotentTree(tree) :: collect(isTopTree = false, fn) ::: branched
+            IdempotentTrees(tree) :: collect(isTopTree = false, fn) ::: branched
           else collect(isTopTree, fn) ::: branched
         case Typed(expr, _) =>
           if (isTopTree)
-            IdempotentTree(tree) :: collect(isTopTree = false, expr)
+            IdempotentTrees(tree) :: collect(isTopTree = false, expr)
           else collect(isTopTree, expr)
         case _ => Nil // Impossible case, t1 is idempotent
       }
@@ -377,7 +377,7 @@ object IdempotentTree {
         case t => t
       }
     }
-    IdempotentTree(loop(itree.tree))
+    IdempotentTrees(loop(itree.tree))
   }
 
 }
