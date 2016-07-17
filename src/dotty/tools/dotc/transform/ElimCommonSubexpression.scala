@@ -125,6 +125,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       case tree: Tree if !analyzed.contains(tree) =>
         IdempotentTrees.from(tree) match {
           case Some(idempotent) =>
+            if (debug) println(s"PROCESSING $tree")
             val allSubTrees = IdempotentTrees.allIdempotentTrees(idempotent)
             cached += tree -> allSubTrees
             orderExploration += tree
@@ -151,18 +152,23 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
       case defInsideBlock: ValOrDefDef if visited.contains(defInsideBlock.symbol) =>
         val sym = defInsideBlock.symbol
-        hostsOfOptimizations += (sym -> List.empty[ValDef])
+        var addHost = false
         if (!analyzed.contains(defInsideBlock.rhs)) {
           // Top level rhs may be impure but contain idempotent trees
           defInsideBlock.rhs.foreachSubTree { st =>
-            rhsToValDefDef += (st -> sym)
+            if (analyzed.contains(st)) {
+              if (!addHost) addHost = true
+              rhsToValDefDef += (st -> sym)
+            }
           }
         } else {
+          addHost = true
           // Only inner sub trees may be optimized, not the top level ones
           cached(defInsideBlock.rhs).foreach { ist =>
             rhsToValDefDef += (ist.tree -> sym)
           }
         }
+        if (addHost) hostsOfOptimizations += (sym -> List.empty[ValDef])
 
       case t =>
     }
@@ -215,6 +221,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
       val candidatesWithParents =
         (candidatesBatches zip topLevelIdempotentParents).filter(_._1.nonEmpty)
+      if (debug) println(s"CANDIDATES: $candidatesWithParents")
       candidatesWithParents.foreach { pair =>
         val (itrees, parent) = pair
         val onlyTrees = itrees.map(_._1)
@@ -344,8 +351,8 @@ object IdempotentTrees {
     // TODO: Pending to remove Typed casts to remove comparison failures
     def collect(tree: Tree): List[IdempotentTree] =
       tree match {
-        case EmptyTree | Literal(_) | Ident(_) => Nil
-        case This(_) | Super(_, _) => List(IdempotentTrees(tree))
+        case Ident(_) | This(_) | EmptyTree | Literal(_) => Nil
+        case Super(_, _) => List(IdempotentTrees(tree))
         case Select(qual, _) =>
           IdempotentTrees(tree) :: collect(qual)
         case TypeApply(fn, _) =>
