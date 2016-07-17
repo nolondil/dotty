@@ -118,9 +118,6 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
     def emptyMutableSet = collection.mutable.HashSet[Tree]()
 
     val analyzer: Visitor = {
-      case Ident(_) | EmptyTree | This(_) | Super(_, _) | Literal(_) =>
-        // This avoids visiting unnecessary Idempotent instances
-
       case tree: Tree if !analyzed.contains(tree) =>
         IdempotentTrees.from(tree) match {
           case Some(idempotent) =>
@@ -182,7 +179,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
       /* Perform optimization, add to optimized and return `ValDef` */
       def optimize(cand: IdempotentTree): ValDef = {
-        val termName = ctx.freshName("cse").toTermName
+        val termName = ctx.freshName("cse$$").toTermName
         val valDef = tpd.SyntheticValDef(termName, cand.tree)
         val ref = tpd.ref(valDef.symbol)
         optimized += (cand -> (valDef -> ref))
