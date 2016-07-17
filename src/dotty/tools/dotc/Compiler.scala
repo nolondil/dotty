@@ -17,6 +17,7 @@ import core.Denotations.SingleDenotation
 
 import dotty.tools.backend.jvm.{LabelDefs, GenBCode, CollectSuperCalls}
 import dotty.tools.backend.sjs.GenSJSIR
+import dotty.tools.dotc.transform.linker.IdempotencyInference
 
 /** The central class of the dotc compiler. The job of a compiler is to create
  *  runs, which process given `phases` in a given `rootContext`.

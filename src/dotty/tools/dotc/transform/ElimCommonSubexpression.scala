@@ -268,7 +268,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
               IdempotentTree.from(tree) match {
                 case Some(itree) =>
                   val ret = changeReference(itree, tree)
-                  if (debug && ret ne tree) println(s"rewriting ${tree.show} to ${ret.show}")
+                  if (debug && (ret ne tree)) println(s"rewriting ${tree.show} to ${ret.show}")
                   ret
                 case None => tree
               }

@@ -18,8 +18,7 @@ import java.util
 import Names._
 import dotty.tools.dotc.core.Constants.Constant
 import dotty.tools.dotc.core.Phases.Phase
-import dotty.tools.dotc.transform.Summaries.CallWithContext
-import dotty.tools.dotc.transform.{BuildCallGraph, Splitter, TreeTransforms}
+import dotty.tools.dotc.transform.{Splitter, TreeTransforms}
 import dotty.tools.dotc.transform.TreeTransforms.{MiniPhaseTransform, TransformerInfo, TreeTransform}
 
 import scala.collection.JavaConversions
