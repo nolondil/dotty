@@ -3,16 +3,26 @@ package dotc
 package ast
 
 import core._
-import Types._, Names._, Flags._, util.Positions._, Contexts._, Constants._, SymDenotations._, Symbols._
-import Denotations._, StdNames._
-import annotation.tailrec
+import Types._
+import Names._
+import Flags._
+import util.Positions._
+import Contexts._
+import Constants._
+import SymDenotations._
+import Symbols._
+import Denotations._
+import StdNames._
+
+import annotation.{Idempotent, tailrec}
 import language.higherKinds
 import collection.IndexedSeqOptimized
 import collection.immutable.IndexedSeq
 import collection.mutable.ListBuffer
 import parsing.Tokens.Token
 import printing.Printer
-import util.{Stats, Attachment, DotClass}
+import util.{Attachment, DotClass, Stats}
+
 import annotation.unchecked.uncheckedVariance
 import language.implicitConversions
 
@@ -284,6 +294,7 @@ object Trees {
    */
   abstract class ProxyTree[-T >: Untyped] extends Tree[T] {
     type ThisTree[-T >: Untyped] <: ProxyTree[T]
+    @Idempotent
     def forwardTo: Tree[T]
     override def denot(implicit ctx: Context): Denotation = forwardTo.denot
     override def isTerm = forwardTo.isTerm

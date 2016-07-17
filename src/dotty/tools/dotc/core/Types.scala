@@ -26,13 +26,16 @@ import dotty.tools.dotc.transform.Erasure
 import printing.Printer
 import Hashable._
 import Uniques._
-import collection.{mutable, Seq, breakOut}
+
+import collection.{Seq, breakOut, mutable}
 import config.Config
 import config.Printers._
-import annotation.tailrec
+
+import annotation.{Idempotent, tailrec}
 import Flags.FlagSet
+
 import language.implicitConversions
-import scala.util.hashing.{ MurmurHash3 => hashing }
+import scala.util.hashing.{MurmurHash3 => hashing}
 
 object Types {
 
@@ -1248,6 +1251,7 @@ object Types {
   abstract class TypeProxy extends Type {
 
     /** The type to which this proxy forwards operations. */
+    @Idempotent
     def underlying(implicit ctx: Context): Type
 
     /** The closest supertype of this type. This is the same as `underlying`,
@@ -1391,6 +1395,7 @@ object Types {
       if (denotationIsCurrent) symbol else NoSymbol
 
     /** The denotation currently denoted by this type */
+    @Idempotent
     final def denot(implicit ctx: Context): Denotation = {
       val now = ctx.period
       if (checkedPeriod == now) lastDenotation else denotAt(now)
@@ -1719,6 +1724,7 @@ object Types {
     type ThisType = TermRef
 
     //assert(name.toString != "<local Coder>")
+    @Idempotent
     override def underlying(implicit ctx: Context): Type = {
       val d = denot
       if (d.isOverloaded) NoType else d.info
@@ -1742,6 +1748,7 @@ object Types {
 
     type ThisType = TypeRef
 
+    @Idempotent
     override def underlying(implicit ctx: Context): Type = info
 
     override def superType(implicit ctx: Context): Type = info match {
@@ -1957,6 +1964,7 @@ object Types {
    */
   abstract case class ThisType(tref: TypeRef) extends CachedProxyType with SingletonType {
     def cls(implicit ctx: Context): ClassSymbol = tref.stableInRunSymbol.asClass
+    @Idempotent
     override def underlying(implicit ctx: Context): Type =
       if (ctx.erasedTypes) tref else cls.classInfo.selfType
     override def computeHash = doHash(tref)
@@ -1975,6 +1983,7 @@ object Types {
    *  by `super`.
    */
   abstract case class SuperType(thistpe: Type, supertpe: Type) extends CachedProxyType with SingletonType {
+    @Idempotent
     override def underlying(implicit ctx: Context) = supertpe
     def derivedSuperType(thistpe: Type, supertpe: Type)(implicit ctx: Context) =
       if ((thistpe eq this.thistpe) && (supertpe eq this.supertpe)) this
@@ -1993,6 +2002,7 @@ object Types {
 
   /** A constant type with  single `value`. */
   abstract case class ConstantType(value: Constant) extends CachedProxyType with SingletonType {
+    @Idempotent
     override def underlying(implicit ctx: Context) = value.tpe
     override def computeHash = doHash(value)
   }
@@ -2018,6 +2028,7 @@ object Types {
       myRef
     }
     def evaluating = computed && myRef == null
+    @Idempotent
     override def underlying(implicit ctx: Context) = ref
     override def toString = s"LazyRef($ref)"
     override def equals(other: Any) = other match {
@@ -2040,6 +2051,7 @@ object Types {
    */
   abstract case class RefinedType(parent: Type, refinedName: Name, refinedInfo: Type) extends RefinedOrRecType {
 
+    @Idempotent
     override def underlying(implicit ctx: Context) = parent
 
     private def badInst =
@@ -2093,6 +2105,7 @@ object Types {
 
     val parent = parentExp(this)
 
+    @Idempotent
     override def underlying(implicit ctx: Context): Type = parent
 
     def derivedRecType(parent: Type)(implicit ctx: Context): RecType =
@@ -2452,6 +2465,7 @@ object Types {
   abstract case class ExprType(resType: Type)
   extends CachedProxyType with TermType with MethodicType {
     override def resultType(implicit ctx: Context): Type = resType
+    @Idempotent
     override def underlying(implicit ctx: Context): Type = resType
     protected def computeSignature(implicit ctx: Context): Signature = resultSignature
     def derivedExprType(resType: Type)(implicit ctx: Context) =
@@ -2572,6 +2586,7 @@ object Types {
     assert(resType.isInstanceOf[TermType], this)
     assert(paramNames.nonEmpty)
 
+    @Idempotent
     override def underlying(implicit ctx: Context) = resType
 
     lazy val typeParams: List[LambdaParam] =
@@ -2639,6 +2654,7 @@ object Types {
     private var validSuper: Period = Nowhere
     private var cachedSuper: Type = _
 
+    @Idempotent
     override def underlying(implicit ctx: Context): Type = tycon
 
     override def superType(implicit ctx: Context): Type = {
@@ -2722,6 +2738,7 @@ object Types {
 
     def paramName = binder.paramNames(paramNum)
 
+    @Idempotent
     override def underlying(implicit ctx: Context): Type = binder.paramTypes(paramNum)
     def copyBoundType(bt: BT) = new MethodParamImpl(bt, paramNum)
 
@@ -2766,6 +2783,7 @@ object Types {
 
     def paramName = binder.paramNames(paramNum)
 
+    @Idempotent
     override def underlying(implicit ctx: Context): Type = {
       val bounds = binder.paramBounds
       if (bounds == null) NoType // this can happen if the referenced generic type is not initialized yet
@@ -2791,6 +2809,7 @@ object Types {
   /** a self-reference to an enclosing recursive type. */
   case class RecThis(binder: RecType) extends BoundType with SingletonType {
     type BT = RecType
+    @Idempotent
     override def underlying(implicit ctx: Context) = binder
     def copyBoundType(bt: BT) = RecThis(bt)
 
@@ -2812,6 +2831,7 @@ object Types {
 
   /** A skolem type reference with underlying type `binder`. */
   abstract case class SkolemType(info: Type) extends UncachedProxyType with ValueType with SingletonType {
+    @Idempotent
     override def underlying(implicit ctx: Context) = info
     def derivedSkolemType(info: Type)(implicit ctx: Context) =
       if (info eq this.info) this else SkolemType(info)
@@ -2914,6 +2934,7 @@ object Types {
     }
 
     /** If the variable is instantiated, its instance, otherwise its origin */
+    @Idempotent
     override def underlying(implicit ctx: Context): Type = {
       val inst = instanceOpt
       if (inst.exists) inst
@@ -3059,6 +3080,7 @@ object Types {
 
     def variance: Int = 0
 
+    @Idempotent
     override def underlying(implicit ctx: Context): Type = hi
 
     /** The non-alias type bounds type with given bounds */
@@ -3175,6 +3197,7 @@ object Types {
   case class AnnotatedType(tpe: Type, annot: Annotation)
       extends UncachedProxyType with ValueType {
     // todo: cache them? but this makes only sense if annotations and trees are also cached.
+    @Idempotent
     override def underlying(implicit ctx: Context): Type = tpe
     def derivedAnnotatedType(tpe: Type, annot: Annotation) =
       if ((tpe eq this.tpe) && (annot eq this.annot)) this

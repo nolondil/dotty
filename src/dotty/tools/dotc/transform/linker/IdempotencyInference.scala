@@ -68,6 +68,7 @@ class IdempotencyInference extends MiniPhaseTransform with IdentityDenotTransfor
             }
           }
       }
+      println(s" * * * * Marked as idempotent ${inferredIdempotent.size} out of ${collectedCalls.size} methods")
     }
 
     tree
