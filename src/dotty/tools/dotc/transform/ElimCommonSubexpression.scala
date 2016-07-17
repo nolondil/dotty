@@ -10,6 +10,7 @@ import Flags._
 import ast.Trees._
 import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.transform.IdempotentTree.IdempotentTree
+import dotty.tools.dotc.transform.linker.IdempotencyInference
 
 import scala.annotation.tailrec
 
@@ -51,7 +52,11 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
   private final val debug = true
 
-  override def runsAfter = Set(classOf[ElimByName])
+  override def runsAfter = Set(classOf[ElimByName], classOf[IdempotencyInference])
+
+
+
+
 
   /* Imitate `Simplify` structure for the moment being */
   type Visitor = Tree => Unit
@@ -325,25 +330,7 @@ object IdempotentTree {
     if (isIdempotent(tree)) Some(new IdempotentTree(tree)) else None
 
   def isIdempotent(tree: Tree)(implicit ctx: Context): Boolean = {
-
-    /** Expressions known to be initialized once are idempotent (lazy vals
-      * and vals), as well as methods annotated with `Idempotent` */
-    def isIdempotentRef(tree: Tree): Boolean = {
-      val sym = tree.symbol
-      if (sym hasAnnotation defn.IdempotentAnnot) true // @Idempotent
-      else if (sym is Lazy) true // lazy val and singleton objects
-      else !(sym is Mutable) && !(sym is Method) // val
-    }
-
-    tree match {
-      case EmptyTree | This(_) | Super(_, _) | Literal(_) => true
-      case Ident(_) => isIdempotentRef(tree)
-      case Select(qual, _) => isIdempotent(qual) && isIdempotentRef(tree)
-      case TypeApply(fn, _) => isIdempotent(fn)
-      case Apply(fn, args) => isIdempotent(fn) && (args forall isIdempotent)
-      case Typed(expr, _) => isIdempotent(expr)
-      case _ => false
-    }
+    ctx.idempotencyPhase.asInstanceOf[IdempotencyInference].isIdempotent(tree)
   }
 
   /** Collects all the idempotent sub trees, including the original tree. */

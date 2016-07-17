@@ -62,7 +62,8 @@ class Compiler {
            new ExplicitOuter,       // Add accessors to outer classes from nested ones.
            new ExplicitSelf,        // Make references to non-trivial self types explicit as casts
            new CrossCastAnd,        // Normalize selections involving intersection types.
-           new Splitter),           // Expand selections involving union types into conditionals
+           new Splitter,           // Expand selections involving union types into conditionals
+           new IdempotencyInference),
       List(new VCInlineMethods,     // Inlines calls to value class methods
            new IsInstanceOfEvaluator, // Issues warnings when unreachable statements are present in match/if expressions
            new SeqLiterals,         // Express vararg arguments as arrays

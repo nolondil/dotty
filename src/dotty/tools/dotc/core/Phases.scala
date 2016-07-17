@@ -16,6 +16,7 @@ import dotty.tools.dotc.transform._
 import Periods._
 import typer.{FrontEnd, RefChecks}
 import ast.tpd
+import dotty.tools.dotc.transform.linker.IdempotencyInference
 
 trait Phases {
   self: Context =>
@@ -243,6 +244,7 @@ object Phases {
     private val explicitOuterCache = new PhaseCache(classOf[ExplicitOuter])
     private val gettersCache = new PhaseCache(classOf[Getters])
     private val genBCodeCache = new PhaseCache(classOf[GenBCode])
+    private val idempotencyCahce = new PhaseCache(classOf[IdempotencyInference])
 
     def typerPhase = typerCache.phase
     def picklerPhase = picklerCache.phase
@@ -257,6 +259,7 @@ object Phases {
     def explicitOuterPhase = explicitOuterCache.phase
     def gettersPhase = gettersCache.phase
     def genBCodePhase = genBCodeCache.phase
+    def idempotencyPhase = idempotencyCahce.phase
 
     def isAfterTyper(phase: Phase): Boolean = phase.id > typerPhase.id
   }
