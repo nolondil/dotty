@@ -26,8 +26,11 @@ import collection.mutable
 import scala.collection.immutable.::
 
 /** This phase applies rewritings provided by libraries. */
-class IdempotencyInference extends MiniPhaseTransform with IdentityDenotTransformer {
+class IdempotencyInference
+    extends MiniPhaseTransform
+    with IdentityDenotTransformer {
   thisTransform =>
+
   def phaseName: String = "IdempotencyInference"
   import tpd._
 
@@ -39,7 +42,8 @@ class IdempotencyInference extends MiniPhaseTransform with IdentityDenotTransfor
 
   // TODO: check overriding rules.
 
-  override def transformDefDef(tree: tpd.DefDef)(implicit ctx: Context, info: TransformerInfo):tpd.Tree = {
+  override def transformDefDef(tree: tpd.DefDef)(
+      implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     val calls = collection.mutable.Set[Symbol]()
     tree.rhs.foreachSubTree {
       case t: RefTree =>
@@ -52,15 +56,18 @@ class IdempotencyInference extends MiniPhaseTransform with IdentityDenotTransfor
     tree
   }
 
-
-  override def transformUnit(tree: tpd.Tree)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
+  override def transformUnit(tree: tpd.Tree)(
+      implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     var changed = true
     while (changed) {
       changed = false
-      collectedCalls.foreach { case (defn, calls) =>
+      collectedCalls.foreach {
+        case (defn, calls) =>
           if (!inferredIdempotent(defn)) {
-            if (calls.forall(isIdempotentRef)) {
-              if ((!defn.symbol.isConstructor) || (defn.symbol.owner.isValueClass || defn.symbol.owner.is(Flags.Module))) {
+            if (calls.forall(call => isIdempotentRef(call))) {
+              if ((!defn.symbol.isConstructor) ||
+                  (defn.symbol.owner.isValueClass ||
+                      defn.symbol.owner.is(Flags.Module))) {
                 changed = true
                 inferredIdempotent += defn
                 println(s"Inferred ${defn.showFullName} idempotent")
@@ -68,41 +75,67 @@ class IdempotencyInference extends MiniPhaseTransform with IdentityDenotTransfor
             }
           }
       }
-      println(s" * * * * Marked as idempotent ${inferredIdempotent.size} out of ${collectedCalls.size} methods")
+      println(
+          s" * * * * Marked as idempotent ${inferredIdempotent.size} out of ${collectedCalls.size} methods")
     }
 
     tree
   }
 
+  // Check if Select points to a method which is not parameterless
+  @inline def invalidSelect(sym: Symbol)(implicit ctx: Context) =
+    (sym is Method) && !sym.info.paramNamess.forall(_.isEmpty)
+
   /** Expressions known to be initialized once are idempotent (lazy vals
-   * and vals), as well as methods annotated with `Idempotent` */
+    * and vals), as well as methods annotated with `Idempotent` */
   def isIdempotentRef(sym: Symbol)(implicit ctx: Context): Boolean = {
-    if ((sym hasAnnotation defn.IdempotentAnnot) || inferredIdempotent(sym)) true // @Idempotent
+    if ((sym hasAnnotation defn.IdempotentAnnot) || inferredIdempotent(sym))
+      true // @Idempotent
     else if (sym is Lazy) true // lazy val and singleton objects
     else if (!(sym is Mutable) && !(sym is Method)) true // val
     else if (sym.maybeOwner.isPrimitiveValueClass) true
     else if (sym == defn.Object_ne || sym == defn.Object_eq) true
-    else if (sym == defn.Any_getClass || sym == defn.Any_asInstanceOf || sym == defn.Any_isInstanceOf) true
+    else if (sym == defn.Any_getClass || sym == defn.Any_asInstanceOf ||
+             sym == defn.Any_isInstanceOf) true
     else if (Erasure.Boxing.isBox(sym) || Erasure.Boxing.isUnbox(sym)) true
     else if (sym.isPrimaryConstructor && sym.owner.is(Flags.Module)) true
     else sym.isGetter && !(sym is Mutable)
   }
 
+  def isIdempotentSelectRef(sym: Symbol)(implicit ctx: Context): Boolean =
+    if (invalidSelect(sym)) false else isIdempotentRef(sym)
+
+  /** Detect whether a tree is a valid idempotent or not, the semantics
+    * of the method are tightly coupled with `allIdempotentTrees` in CSE. */
   def isIdempotent(tree: Tree)(implicit ctx: Context): Boolean = {
-    def loop(tree: Tree, isTopLevel: Boolean = false): Boolean = {
+    def loop(tree: Tree,
+              pendingArgsList: Int,
+              isTopLevel: Boolean = false): Boolean = {
       tree match {
-        case Ident(_) if !isTopLevel => isIdempotentRef(tree.symbol)
-        case EmptyTree | Literal(_) | This(_) if !isTopLevel => true
-        case Select(qual, _) => loop(qual) && isIdempotentRef(tree.symbol)
-        case TypeApply(fn, _) => loop(fn)
-        case Apply(fn, args) => loop(fn) && (args forall (t => loop(t)))
-        case Super(_, _) => true
-        case Typed(expr, _) => loop(expr)
+        case Ident(_) if !isTopLevel =>
+          if (pendingArgsList == 0) isIdempotentRef(tree.symbol) else false
+        case EmptyTree | Literal(_) | This(_) if !isTopLevel =>
+          if (pendingArgsList == 0) true else false
+        case Select(qual, _) =>
+          // println(s"SELECT: $pendingArgsList")
+          loop(qual, pendingArgsList) && isIdempotentRef(tree.symbol)
+        case TypeApply(fn, _) =>
+          // println(s"TYPEAPPLY: $pendingArgsList")
+          // No easy way to check Poly args, don't decrease args list
+          if (isTopLevel) false else loop(fn, pendingArgsList)
+        case Apply(fn, args) =>
+          val currentArgsList = if (pendingArgsList == 0) {
+            val methodType = fn.symbol.info
+            methodType.paramNamess.length - 1
+          } else pendingArgsList - 1
+          // println(s"APPLY: $pendingArgsList")
+          // println(s"\tCURRENT ARGS LIST: $currentArgsList")
+          loop(fn, currentArgsList) && (args forall (t => loop(t, 0)))
+        case Super(_, _) => if (pendingArgsList == 0) true else false
         case _ => false
       }
     }
-    val res = loop(tree, isTopLevel = true)
-    res
+    // println(s"\nISIDEMPOTENT: $tree")
+    loop(tree, 0, isTopLevel = true)
   }
 }
-

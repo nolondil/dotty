@@ -5,6 +5,7 @@ import scala.annotation.Idempotent
 object CommonSubexpression {
 
   @Idempotent def sum(i1: Int, i2: Int) = i1 + i2
+  @Idempotent def sum2[A: Numeric](i1: A, i2: A) = implicitly[Numeric[A]].plus(i1, i2)
 
   def method1: Int = {
     val a = 1
@@ -74,9 +75,18 @@ object CommonSubexpression {
   }
 
   def method8: Boolean = {
-    val a = 1 <= 2
-    val b = 1 <= 3
-    a && b
+    // SHOULD DO NOTHING
+    for (x <- List(1, 2, 3); y = x * x; z = x * y; u <- 0 to y) yield x * y * z * u
+    true
+  }
+
+  def method9: Int = {
+    val a = 1
+    val c = 3 + sum2(a, a)
+    val d = sum2(a, a) + 3
+    assert(c == 5)
+    assert(d == 5)
+    d - c
   }
 
   def main(args: Array[String]): Unit = {
@@ -87,7 +97,9 @@ object CommonSubexpression {
     assert(method4 == 1)
     assert(method5 == 2)
     assert(method6 == 1)
-    assert(method7 == true)
+    assert(method7 == 0)
+    assert(method8 == true)
+    assert(method9 == 0)
   }
 
 }
