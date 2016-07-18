@@ -83,8 +83,8 @@ class IdempotencyInference
   }
 
   // Check if Select points to a method which is not parameterless
-  @inline def invalidSelect(sym: Symbol)(implicit ctx: Context) =
-    (sym is Method) && !sym.info.paramNamess.forall(_.isEmpty)
+  @inline def invalidMethodRef(sym: Symbol)(implicit ctx: Context) =
+    ((sym is Method) || (sym is Label)) && !sym.info.paramNamess.forall(_.isEmpty)
 
   /** Expressions known to be initialized once are idempotent (lazy vals
     * and vals), as well as methods annotated with `Idempotent` */
@@ -102,40 +102,52 @@ class IdempotencyInference
     else sym.isGetter && !(sym is Mutable)
   }
 
-  def isIdempotentSelectRef(sym: Symbol)(implicit ctx: Context): Boolean =
-    if (invalidSelect(sym)) false else isIdempotentRef(sym)
-
   /** Detect whether a tree is a valid idempotent or not, the semantics
     * of the method are tightly coupled with `allIdempotentTrees` in CSE. */
   def isIdempotent(tree: Tree)(implicit ctx: Context): Boolean = {
     def loop(tree: Tree,
-              pendingArgsList: Int,
-              isTopLevel: Boolean = false): Boolean = {
+             pendingArgsList: Int,
+             isTopLevel: Boolean = false,
+             checkMethodRef: Boolean = false): Boolean = {
       tree match {
         case Ident(_) if !isTopLevel =>
-          if (pendingArgsList == 0) isIdempotentRef(tree.symbol) else false
+          val sym = tree.symbol
+          val zeroArgs = pendingArgsList == 0
+
+          if (zeroArgs && checkMethodRef)
+           isIdempotentRef(sym) && !invalidMethodRef(sym)
+          else if (zeroArgs) isIdempotentRef(sym)
+          else false
+
         case EmptyTree | Literal(_) | This(_) if !isTopLevel =>
           if (pendingArgsList == 0) true else false
+
         case Select(qual, _) =>
-          // println(s"SELECT: $pendingArgsList")
-          loop(qual, pendingArgsList) && isIdempotentRef(tree.symbol)
+          loop(qual, pendingArgsList) && {
+            val sym = tree.symbol
+            val validIdemRef = isIdempotentRef(sym)
+            if (checkMethodRef) validIdemRef && !invalidMethodRef(sym)
+            else validIdemRef
+          }
+
         case TypeApply(fn, _) =>
-          // println(s"TYPEAPPLY: $pendingArgsList")
-          // No easy way to check Poly args, don't decrease args list
-          if (isTopLevel) false else loop(fn, pendingArgsList)
+          if (pendingArgsList > 0) false
+          else if (isTopLevel) loop(fn, pendingArgsList, checkMethodRef = true)
+          else loop(fn, pendingArgsList)
+
         case Apply(fn, args) =>
           val currentArgsList = if (pendingArgsList == 0) {
             val methodType = fn.symbol.info
             methodType.paramNamess.length - 1
           } else pendingArgsList - 1
-          // println(s"APPLY: $pendingArgsList")
-          // println(s"\tCURRENT ARGS LIST: $currentArgsList")
           loop(fn, currentArgsList) && (args forall (t => loop(t, 0)))
+
         case Super(_, _) => if (pendingArgsList == 0) true else false
+
         case _ => false
       }
     }
-    // println(s"\nISIDEMPOTENT: $tree")
+
     loop(tree, 0, isTopLevel = true)
   }
 }

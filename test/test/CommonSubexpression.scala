@@ -5,7 +5,8 @@ import scala.annotation.Idempotent
 object CommonSubexpression {
 
   @Idempotent def sum(i1: Int, i2: Int) = i1 + i2
-  @Idempotent def sum2[A: Numeric](i1: A, i2: A) = implicitly[Numeric[A]].plus(i1, i2)
+  @Idempotent def sum2[A: Numeric, B: Numeric](i1: A, i2: B) =
+    implicitly[Numeric[A]].toInt(i1) + implicitly[Numeric[B]].toInt(i2)
 
   def method1: Int = {
     val a = 1
@@ -89,6 +90,63 @@ object CommonSubexpression {
     d - c
   }
 
+  // Method equals are optimized
+  case class Foo(a: Int)
+  case class Bar(f: Foo)
+
+  def method10: Boolean = {
+    val a1 = Bar(Foo(1))
+    val a2 = Bar(Foo(1))
+    a1.equals(a2)
+  }
+
+  def method11: Boolean = {
+    class A
+    class B extends A
+    class C extends A
+    val a: A = new B
+    val b = a.isInstanceOf[B]
+    val c = a.isInstanceOf[B]
+    b && c
+  }
+
+  def method12: Int = {
+    val a = Bar(Foo(1))
+    val c = 3 + sum2(a.f.a, a.f.a)
+    val d = sum2(a.f.a, a.f.a) + 3
+    assert(c == 5)
+    assert(d == 5)
+    d - c
+  }
+
+  def method13: Int = {
+    class A(val a: Int) {
+      @Idempotent def sum[N: Numeric](b: N) =
+        a + implicitly[Numeric[N]].toInt(b)
+    }
+
+    val a = new A(1)
+    val b = a.sum(2)
+    val c = a.sum(2) + 1
+    assert(b == 3)
+    assert(c == 4)
+    c - b
+  }
+
+  def method14: Int = {
+    class A(val a: Int) {
+      @Idempotent def convert[N: Numeric]: N =
+        implicitly[Numeric[N]].fromInt(a)
+    }
+
+    val a = new A(1)
+    val b = a.convert[Int]
+    val c = a.convert[Int]
+    assert(b == 1)
+    assert(c == 1)
+    c - b
+  }
+
   def main(args: Array[String]): Unit = {
     println("executing")
     assert(method1 == 1)
@@ -98,8 +156,13 @@ object CommonSubexpression {
     assert(method5 == 2)
     assert(method6 == 1)
     assert(method7 == 0)
-    assert(method8 == true)
+    assert(method8)
     assert(method9 == 0)
+    assert(method10)
+    assert(method11)
+    assert(method12 == 0)
+    assert(method13 == 1)
+    assert(method14 == 0)
   }
 
 }

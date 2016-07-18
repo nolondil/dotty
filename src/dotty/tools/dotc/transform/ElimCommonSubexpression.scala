@@ -225,7 +225,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
       val candidatesWithParents =
         (candidatesBatches zip topLevelIdempotentParents).filter(_._1.nonEmpty)
-      //if (debug) println(s"CANDIDATES: $candidatesWithParents")
+      if (debug) println(s"CANDIDATES: $candidatesWithParents")
       candidatesWithParents.foreach { pair =>
         val (itrees, parent) = pair
         val onlyTrees = itrees.map(_._1)
@@ -310,7 +310,8 @@ object IdempotentTrees {
         case _: This => t.symbol.hashCode()
         case _: Super => t.symbol.hashCode()
         case _: Ident => t.symbol.hashCode()
-        case Literal(constant) => if (constant.value == null) 0 else constant.value.hashCode()
+        case Literal(constant) =>
+          if (constant.value == null) 0 else constant.value.hashCode()
         case Select(qual, name) =>
           mix(name.hashCode(), idempotentHashCode(qual))
         case Apply(fun1, args1) =>
@@ -344,8 +345,8 @@ object IdempotentTrees {
   def from(tree: Tree)(implicit ctx: Context): Option[IdempotentTree] =
     if (isIdempotent(tree)) Some(new IdempotentTree(tree)) else None
 
-  def invalidSelect(sym: Symbol)(implicit ctx: Context): Boolean =
-    ctx.idempotencyPhase.asInstanceOf[IdempotencyInference].invalidSelect(sym)
+  def invalidMethodRef(sym: Symbol)(implicit ctx: Context): Boolean =
+    ctx.idempotencyPhase.asInstanceOf[IdempotencyInference].invalidMethodRef(sym)
 
   def isIdempotent(tree: Tree)(implicit ctx: Context): Boolean =
     ctx.idempotencyPhase.asInstanceOf[IdempotencyInference].isIdempotent(tree)
@@ -354,32 +355,38 @@ object IdempotentTrees {
     * NOTE: If you modify it, change also the semantics of `isIdempotent`. */
   def allIdempotentTrees(t1: IdempotentTree)(
       implicit ctx: Context): List[IdempotentTree] = {
-    def collectValid(tree: Tree, pendingArgsList: Int): List[IdempotentTree] = {
+    def collectValid(tree: Tree,
+                     canBranch: Boolean = false): List[IdempotentTree] = {
       tree match {
         case Ident(_) | Literal(_) | This(_) | EmptyTree => Nil
+
         case Super(_, _) =>
-          if (pendingArgsList == 0) List(IdempotentTrees(tree)) else Nil
+          if (!canBranch) List(IdempotentTrees(tree)) else Nil
+
         case Select(qual, _) =>
-          val collected = collectValid(qual, pendingArgsList)
-          if (invalidSelect(tree.symbol)) collected
-          else IdempotentTrees(tree) :: collected
+          if (invalidMethodRef(tree.symbol)) {
+            // Select may wrap other instances of Apply
+            if (!canBranch) collectValid(qual, canBranch = true) else Nil
+          } else IdempotentTrees(tree) :: collectValid(qual, canBranch = true)
+
         case TypeApply(fn, _) =>
-          // No easy way to check Poly args, don't decrease args list
-          if (pendingArgsList > 1) collectValid(fn, pendingArgsList)
-          else IdempotentTrees(tree) :: collectValid(fn, 0)
+          if (canBranch) {
+            if (invalidMethodRef(fn.symbol)) Nil
+            else IdempotentTrees(tree) :: collectValid(fn, canBranch = false)
+          } else collectValid(fn)
+
         case Apply(fn, args) =>
-          val prefix = if (pendingArgsList == 0) {
-            val methodType = fn.symbol.info
-            val argsList = methodType.paramNamess.length
-            IdempotentTrees(tree) :: collectValid(fn, argsList - 1)
-          } else collectValid(fn, pendingArgsList - 1)
-          val cargs = args.map(a => collectValid(a, 0))
-          val branched = if (cargs.nonEmpty) cargs.reduce(_ ++ _) else List()
+          val collected = collectValid(fn, canBranch = false)
+          val prefix =
+            if (canBranch) IdempotentTrees(tree) :: collected else collected
+          val cargs = args.map(a => collectValid(a, canBranch = true))
+          val branched = if (cargs.nonEmpty) cargs.reduce(_ ++ _) else Nil
           prefix ::: branched
+
         case _ => Nil // Impossible case, tree must be non idempotent
       }
     }
-    collectValid(t1.tree, 0)
+    collectValid(t1.tree, canBranch = true)
   }
 
   /** Replace a targeted **idempotent** subtree by a reference to another new tree.
