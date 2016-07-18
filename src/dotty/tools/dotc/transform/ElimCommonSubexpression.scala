@@ -33,9 +33,9 @@ import dotty.tools.dotc.transform.linker.IdempotencyInference
   *   val c = a1 + 2
   * }}}
   *
-  * only if `+` is guaranteed to be immutable.
+  * only if `+` is guaranteed to be idempotent.
   *
-  * Originally written by @allanrenucci, redesigned and improved by @jvican.
+  * @author jvican (Inspired by the work of @allanrenucci)
   *
   */
 class ElimCommonSubexpression extends MiniPhaseTransform {
