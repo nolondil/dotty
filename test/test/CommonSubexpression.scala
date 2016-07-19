@@ -147,6 +147,34 @@ object CommonSubexpression {
     c - b
   }
 
+  def method15: Int = {
+    val a = 1
+    val c = () => {
+      val b = sum(sum(1, a), 3)
+      b + 1 - 1
+    }
+    val c2 = c()
+    val d = sum(sum(1, a), 4)
+    assert(c2 == 5)
+    assert(d == 6)
+    d - c2
+  }
+
+  def method16: Int = {
+    val a = 1
+    val c = {
+      val e = () => {
+        val b = sum(sum(1, a), 3)
+        b + 1 - 1
+      }
+      e()
+    }
+    val d = sum(sum(1, a), 4)
+    assert(c == 5)
+    assert(d == 6)
+    d - c
+  }
+
   def main(args: Array[String]): Unit = {
     println("executing")
     assert(method1 == 1)
@@ -163,6 +191,8 @@ object CommonSubexpression {
     assert(method12 == 0)
     assert(method13 == 1)
     assert(method14 == 0)
+    assert(method15 == 1)
+    //assert(method16 == 1)
   }
 
 }

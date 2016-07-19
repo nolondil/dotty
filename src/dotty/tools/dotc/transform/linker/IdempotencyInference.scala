@@ -82,9 +82,13 @@ class IdempotencyInference
     tree
   }
 
-  // Check if Select points to a method which is not parameterless
-  @inline def invalidMethodRef(sym: Symbol)(implicit ctx: Context) =
-    ((sym is Method) || (sym is Label)) && !sym.info.paramNamess.forall(_.isEmpty)
+  /** Check that the symbol points to a method which doesn't need parameters.
+    * Use this method in order to check that idempotent trees are valid. */
+  @inline def invalidMethodRef(sym: Symbol)(implicit ctx: Context) = {
+    ((sym is Method) || (sym is Label)) &&
+      !sym.info.paramTypess.forall(_.isEmpty) ||
+      sym.info.widenDealias.isInstanceOf[PolyType]
+  }
 
   /** Expressions known to be initialized once are idempotent (lazy vals
     * and vals), as well as methods annotated with `Idempotent` */
