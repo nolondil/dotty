@@ -48,7 +48,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
   override def phaseName = "elimCommonSubexpression"
 
-  private final val debug = true
+  private final val debug = false
 
   override def runsAfter = Set(classOf[ElimByName], classOf[IdempotencyInference])
 
@@ -63,23 +63,28 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
     * in the true meaning of the word. Otherwise, infinite cycles may happen. */
   override def transformDefDef(tree: tpd.DefDef)(
       implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
-    if (!tree.symbol.is(Flags.Label)) {
-      var rhs0 = tree.rhs
-      val (name, nextVisitor, nextTransformer) = elimCommonSubexpression(
+    val ctx0: Context = ctx.withModeBits(Mode.FutureDefsOK)
+    val result = {
+      implicit val ctx: Context = ctx0
+      if (!tree.symbol.is(Flags.Label)) {
+        var rhs0 = tree.rhs
+        val (name, nextVisitor, nextTransformer) = elimCommonSubexpression(
           ctx.withOwner(tree.symbol))
-      rhs0.foreachSubTree(nextVisitor)
-      val transformer = nextTransformer()
-      val rhst = new TreeMap() {
-        override def transform(
-            tree: tpd.Tree)(implicit ctx: Context): tpd.Tree =
-          transformer(super.transform(tree))
-      }.transform(rhs0)
-      if (rhst ne rhs0)
-        println(s"${tree.symbol} after $name became ${rhst.show}")
-      rhs0 = rhst
-      if (rhs0 ne tree.rhs) cpy.DefDef(tree)(rhs = rhs0)
-      else tree
-    } else tree
+        rhs0.foreachSubTree(nextVisitor)
+        val transformer = nextTransformer()
+        val rhst = new TreeMap() {
+          override def transform(
+                                  tree: tpd.Tree)(implicit ctx: Context): tpd.Tree =
+            transformer(super.transform(tree))
+        }.transform(rhs0)
+        if (rhst ne rhs0)
+          println(s"${tree.symbol} after $name became ${rhst.show}")
+        rhs0 = rhst
+        if (rhs0 ne tree.rhs) cpy.DefDef(tree)(rhs = rhs0)
+        else tree
+      } else tree
+    }
+    result
   }
 
   /** Lifted up val def and tree referencing to it */
