@@ -89,6 +89,10 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
   /** Lifted up val def and tree referencing to it */
   type Optimized = (ValDef, Tree)
+  sealed trait Position
+  case object OutsideDef extends Position
+  case object InsideDef extends Position
+  type OptimizedValDef = (ValDef, Position)
 
   def elimCommonSubexpression: Optimization = (ctx0: Context) => {
     implicit val ctx: Context = ctx0
@@ -261,11 +265,11 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
           val seenDepth = depths(parent.tree)
           val minDepth = minDepths(parent)
           val enclosingTree = getEnclosingTree(parent.tree, seenDepth - minDepth)
-          val positionTarget = enclosingTree.symbol
+          val target = enclosingTree.symbol
 
           val firstValDef = optimize(firstChild)
           prepareTargets(firstChild, firstChild)
-          registerValDef(firstValDef, positionTarget)
+          registerValDef(firstValDef, target)
 
           onlyTrees.tail.foldLeft(firstChild) { (optimizedChild, itree) =>
             val (_, ref) = optimized(optimizedChild)
@@ -273,7 +277,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
             if (!optimized.contains(replaced)) {
               val valDef = optimize(replaced)
               prepareTargets(itree, replaced)
-              registerValDef(valDef, positionTarget)
+              registerValDef(valDef, target)
               replaced
             } else replaced
           }
@@ -301,11 +305,22 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
           if hostsOfOptimizations.contains(enclosingTree.symbol) =>
 
           // Introduce new val defs for this enclosing tree
-          val optimizedValDefs = hostsOfOptimizations(enclosingTree.symbol)
+          val optimizedValDefs = hostsOfOptimizations(enclosingTree.symbol).reverse
           hostsOfOptimizations -= enclosingTree.symbol
           if (optimizedValDefs.nonEmpty) {
             if (debug) println(s"introducing ${optimizedValDefs.map(_.show)}")
-            tpd.Thicket(optimizedValDefs.reverse ::: List(enclosingTree))
+            enclosingTree match {
+              case defDef: DefDef => // Place them inside rhs
+                val finalRhs = defDef.rhs match {
+                  case blk @ Block(stats, expr) =>
+                    cpy.Block(blk)(optimizedValDefs ::: stats, expr)
+                  case whatever =>
+                    tpd.Block(optimizedValDefs, whatever)
+                }
+                cpy.DefDef(defDef)(rhs = finalRhs)
+              case valDef: ValDef => // Place them on top of its definition
+                tpd.Thicket(optimizedValDefs ::: List(enclosingTree))
+            }
           } else enclosingTree
 
         case tree =>

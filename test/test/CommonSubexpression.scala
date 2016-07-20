@@ -7,6 +7,7 @@ object CommonSubexpression {
   @Idempotent def sum(i1: Int, i2: Int) = i1 + i2
   @Idempotent def sum2[A: Numeric, B: Numeric](i1: A, i2: B) =
     implicitly[Numeric[A]].toInt(i1) + implicitly[Numeric[B]].toInt(i2)
+  @Idempotent def div(i1: Int, i2: Int) = i1 / i2
 
   def method1: Int = {
     val a = 1
@@ -175,6 +176,43 @@ object CommonSubexpression {
     d - c
   }
 
+/*  def method17: Unit = {
+    val a = 1
+    val b = try {
+      val d = div(a, 0)
+    } catch { case e: Exception => 0}
+    assert(b == 0)
+    val c = try {
+      val e = div(a, 0)
+    } catch { case e: Exception => 0 }
+    assert(c == 0)
+  }
+
+  def method18: Unit = {
+    val a = 1
+    val b = try {
+      div(a, 0)
+    } catch { case e: Exception => 0}
+    assert(b == 0)
+    val c = try {
+      div(a, 0)
+    } catch { case e: Exception => 0 }
+    assert(c == 0)
+  }*/
+
+  def method19: Int = {
+    val a = 1
+    if (a == 1) {
+      val b = sum(a, a)
+      val c = sum(a, a) + 1
+      b + c
+    } else {
+      val b = sum(a, a)
+      b + 1
+    }
+
+  }
+
   def main(args: Array[String]): Unit = {
     println("executing")
     assert(method1 == 1)
@@ -192,7 +230,10 @@ object CommonSubexpression {
     assert(method13 == 1)
     assert(method14 == 0)
     assert(method15 == 1)
-    //assert(method16 == 1)
+    assert(method16 == 1)
+/*    method17
+    method18*/
+    //assert(method19 == 5)
   }
 
 }
