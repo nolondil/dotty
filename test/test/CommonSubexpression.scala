@@ -176,7 +176,7 @@ object CommonSubexpression {
     d - c
   }
 
-/*  def method17: Unit = {
+  def method17: Unit = {
     val a = 1
     val b = try {
       val d = div(a, 0)
@@ -198,7 +198,7 @@ object CommonSubexpression {
       div(a, 0)
     } catch { case e: Exception => 0 }
     assert(c == 0)
-  }*/
+  }
 
   def method19: Int = {
     val a = 1
@@ -206,6 +206,23 @@ object CommonSubexpression {
       val b = sum(a, a)
       val c = sum(a, a) + 1
       b + c
+    } else {
+      val b = sum(a, a)
+      b + 1
+    }
+
+  }
+
+  def method20: Int = sum(sum(1, 1), sum(1, 1))
+
+  def method21: Int = {
+    val a = 1
+    if (a == 1) {
+      if (a == 2) {
+        val b = sum(a, a)
+      }
+      val c = sum(a, a) + 1
+      c + c - 1
     } else {
       val b = sum(a, a)
       b + 1
