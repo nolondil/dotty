@@ -229,6 +229,29 @@ object CommonSubexpression {
     }
 
   }
+  /* OPTIMIZED TREE
+  ============================
+    def method22: Int = {
+      val a = 1
+      var cse$$1 = _
+      if (a == 1) {
+        if (a == 1) cse$$1 = sum(a, a)
+        else 2
+      } else cse$$1 = sum(a, a)
+      println("DABEI")
+      if (cse$$1 == null) cse$$1 = sum(a, a) else cse$$1
+    }
+  */
+
+/*  def method22: Int = {
+    val a = 1
+    if (a == 1) {
+      if (a == 1) sum(a, a)
+      else sum(a, a)
+    } else sum(a, a)
+    println("DABEI")
+    sum(a, a)
+  }*/
 
   def main(args: Array[String]): Unit = {
     println("executing")
