@@ -51,6 +51,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
   override def phaseName = "elimCommonSubexpression"
 
   private final val debug = false
+  private var optimizedTimes = 0
 
   override def runsAfter =
     Set(classOf[ElimByName], classOf[IdempotencyInference])
@@ -287,7 +288,9 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
       case tree =>
         val resultingTree = replacements.get(tree) match {
-          case Some(ref) => ref
+          case Some(ref) =>
+            optimizedTimes = optimizedTimes + 1
+            ref
           case None => tree
         }
         if (debug && (resultingTree ne tree))
@@ -296,6 +299,11 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
     }
 
     (analyzer _, preOptimizer, transformer)
+  }
+
+  override def transformUnit(tree: tpd.Tree)(implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
+    println(s"CSE removed $optimizedTimes expressions")
+    tree
   }
 }
 
