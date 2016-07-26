@@ -1,5 +1,6 @@
 package dotty.tools.dotc
 package transform.linker
+
 import core._
 import Contexts.Context
 import Flags._
@@ -27,11 +28,12 @@ import scala.collection.immutable.::
 
 /** This phase applies rewritings provided by libraries. */
 class IdempotencyInference
-    extends MiniPhaseTransform
+  extends MiniPhaseTransform
     with IdentityDenotTransformer {
   thisTransform =>
 
   def phaseName: String = "IdempotencyInference"
+
   import tpd._
 
   /** List of names of phases that should precede this phase */
@@ -43,7 +45,7 @@ class IdempotencyInference
   // TODO: check overriding rules.
 
   override def transformDefDef(tree: tpd.DefDef)(
-      implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
+    implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
     val calls = collection.mutable.Set[Symbol]()
     tree.rhs.foreachSubTree {
       case t: RefTree =>
@@ -51,23 +53,31 @@ class IdempotencyInference
           calls += t.symbol
       case _ =>
     }
-    if (tree.rhs.isEmpty || tree.symbol.isSetter) calls += defn.throwMethod
+    if (tree.rhs.isEmpty || tree.symbol.isSetter) calls += defn.Object_notify
     collectedCalls.put(tree.symbol, calls)
     tree
   }
 
-  override def transformUnit(tree: tpd.Tree)(
-      implicit ctx: Context, info: TransformerInfo): tpd.Tree = {
+
+  override def runOn(units: List[CompilationUnit])(implicit ctx: Context): List[CompilationUnit] = {
+    val rez = super.runOn(units)
+    commit(ctx.withPhase(this))
+    rez
+  }
+
+  def commit(implicit ctx: Context) = {
     var changed = true
+    var sizeStats: List[Int] = Nil
     while (changed) {
       changed = false
+      sizeStats = (inferredIdempotent.size - sizeStats.sum) :: sizeStats
       collectedCalls.foreach {
         case (defn, calls) =>
-          if (!inferredIdempotent(defn)) {
+          if (!assumedIdempotent(defn) && !inferredIdempotent(defn)) {
             if (calls.forall(call => isIdempotentRef(call))) {
               if ((!defn.symbol.isConstructor) ||
-                  (defn.symbol.owner.isValueClass ||
-                      defn.symbol.owner.is(Flags.Module))) {
+                (defn.symbol.owner.isValueClass ||
+                  defn.symbol.owner.is(Flags.Module))) {
                 changed = true
                 inferredIdempotent += defn
                 println(s"Inferred ${defn.showFullName} idempotent")
@@ -75,15 +85,15 @@ class IdempotencyInference
             }
           }
       }
+      val allCalls  = collectedCalls.keys.filter(assumedIdempotent).toSet
       println(
-          s" * * * * Marked as idempotent ${inferredIdempotent.size} out of ${collectedCalls.size} methods")
+        s" * * * * Marked as idempotent ${inferredIdempotent.size} out of ${collectedCalls.size} methods, " +
+          s"rounds: ${sizeStats.reverse}, seedSize: ${allCalls.size}")
     }
-
-    tree
   }
 
   /** Check that the symbol points to a method which doesn't need parameters.
-    * Use this method in order to check that idempotent trees are valid. */
+   * Use this method in order to check that idempotent trees are valid. */
   @inline def invalidMethodRef(sym: Symbol)(implicit ctx: Context) = {
     ((sym is Method) || (sym is Label)) &&
       !sym.info.paramTypess.forall(_.isEmpty) ||
@@ -91,23 +101,28 @@ class IdempotencyInference
   }
 
   /** Expressions known to be initialized once are idempotent (lazy vals
-    * and vals), as well as methods annotated with `Idempotent` */
+   * and vals), as well as methods annotated with `Idempotent` */
   def isIdempotentRef(sym: Symbol)(implicit ctx: Context): Boolean = {
     if ((sym hasAnnotation defn.IdempotentAnnot) || inferredIdempotent(sym))
       true // @Idempotent
-    else if (sym is Lazy) true // lazy val and singleton objects
+    else assumedIdempotent(sym)
+  }
+
+  private def assumedIdempotent(sym: Symbol)(implicit ctx: Context): Boolean = {
+    if (sym is Lazy) true // lazy val and singleton objects
     else if (!(sym is Mutable) && !(sym is Method)) true // val
     else if (sym.maybeOwner.isPrimitiveValueClass) true
     else if (sym == defn.Object_ne || sym == defn.Object_eq) true
     else if (sym == defn.Any_getClass || sym == defn.Any_asInstanceOf ||
-             sym == defn.Any_isInstanceOf) true
+      sym == defn.Any_isInstanceOf || sym == defn.Any_!= || sym == defn.Any_== ||
+      sym == defn.throwMethod || sym == defn.String_+ || sym == defn.String_valueOf_Object) true
     else if (Erasure.Boxing.isBox(sym) || Erasure.Boxing.isUnbox(sym)) true
-    else if (sym.isPrimaryConstructor && sym.owner.is(Flags.Module)) true
+    else if (sym.isPrimaryConstructor && (sym.owner.is(Flags.Module) || sym.owner.derivesFrom(defn.ThrowableClass))) true
     else sym.isGetter && !(sym is Mutable)
   }
 
   /** Detect whether a tree is a valid idempotent or not, the semantics
-    * of the method are tightly coupled with `allIdempotentTrees` in CSE. */
+   * of the method are tightly coupled with `allIdempotentTrees` in CSE. */
   def isIdempotent(tree: Tree)(implicit ctx: Context): Boolean = {
     def loop(tree: Tree,
              pendingArgsList: Int,
@@ -119,7 +134,7 @@ class IdempotencyInference
           val zeroArgs = pendingArgsList == 0
 
           if (zeroArgs && checkMethodRef)
-           isIdempotentRef(sym) && !invalidMethodRef(sym)
+            isIdempotentRef(sym) && !invalidMethodRef(sym)
           else if (zeroArgs) isIdempotentRef(sym)
           else false
 
