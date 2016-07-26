@@ -221,11 +221,13 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
     /** Return result of the optimization */
     @inline def optimize(cand: IdempotentTree): Optimized = {
       val name = ctx.freshName("cse$$").toTermName
+      if (name.toString.contains("570"))
+        println("dsds")
       val flags = Flags.Synthetic | Flags.Mutable
       val rhs = cand.tree
       val (tpe, pos) = (rhs.tpe.widen, rhs.pos)
       val symbol = ctx.newSymbol(ctx.owner, name, flags, tpe, coord = pos)
-      val valDef = tpd.ValDef(symbol, Literal(Constant(null)))
+      val valDef = tpd.ValDef(symbol, tpd.defaultValue(tpe))
       val ref = tpd.ref(symbol)
       val valDefIdent = tpd.ref(symbol)
       val assign = tpd.Block(List(valDefIdent.becomes(rhs)), ref)
@@ -280,7 +282,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
             case singleRhs =>
               tpd.Block(optimizedValDefs, singleRhs)
           }
-          cpy.DefDef(defDef)(rhs = finalRhs)
+          cpy.DefDef(defDef)(rhs = finalRhs.withType(finalRhs.tpe.widenIfUnstable))
         } else defDef
 
       case tree =>
@@ -293,7 +295,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
         resultingTree
     }
 
-    (analyzer, preOptimizer, transformer)
+    (analyzer _, preOptimizer, transformer)
   }
 }
 
