@@ -42,6 +42,8 @@ class IdempotencyInference
   private val collectedCalls = mutable.Map[Symbol, mutable.Set[Symbol]]()
   private val inferredIdempotent = mutable.Set[Symbol]()
 
+  private[dotty] def markAsIdempotent(sym: Symbol) = inferredIdempotent += sym
+
   // TODO: check overriding rules.
 
   override def transformDefDef(tree: tpd.DefDef)(
