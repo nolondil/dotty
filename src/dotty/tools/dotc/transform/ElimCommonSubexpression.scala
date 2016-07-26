@@ -222,8 +222,6 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
     /** Return result of the optimization */
     @inline def optimize(cand: IdempotentTree): Optimized = {
       val name = ctx.freshName("cse$$").toTermName
-      if (name.toString.contains("570"))
-        println("dsds")
       val flags = Flags.Synthetic | Flags.Mutable
       val rhs = cand.tree
       val (tpe, pos) = (rhs.tpe.widen, rhs.pos)
