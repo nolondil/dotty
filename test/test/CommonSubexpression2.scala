@@ -426,7 +426,7 @@ object Test {
     val a = new A
     import a._
 
-    test1()
+/*    test1()
     test2()
     test3()
     test4()
@@ -470,6 +470,6 @@ object Test {
 
     // Regression tests
     reg1()
-    reg2()
+    reg2()*/
   }
 }

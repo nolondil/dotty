@@ -76,13 +76,7 @@ object CommonSubexpression {
     d - c
   }
 
-  def method8: Boolean = {
-    // SHOULD DO NOTHING
-    for (x <- List(1, 2, 3); y = x * x; z = x * y; u <- 0 to y) yield x * y * z * u
-    true
-  }
-
-  def method9: Int = {
+  def method8: Int = {
     val a = 1
     val c = 3 + sum2(a, a)
     val d = sum2(a, a) + 3
@@ -95,13 +89,13 @@ object CommonSubexpression {
   case class Foo(a: Int)
   case class Bar(f: Foo)
 
-  def method10: Boolean = {
+  def method9: Boolean = {
     val a1 = Bar(Foo(1))
     val a2 = Bar(Foo(1))
     a1.equals(a2)
   }
 
-  def method11: Boolean = {
+  def method10: Boolean = {
     class A
     class B extends A
     class C extends A
@@ -111,7 +105,7 @@ object CommonSubexpression {
     b && c
   }
 
-  def method12: Int = {
+  def method11: Int = {
     val a = Bar(Foo(1))
     val c = 3 + sum2(a.f.a, a.f.a)
     val d = sum2(a.f.a, a.f.a) + 3
@@ -120,7 +114,20 @@ object CommonSubexpression {
     d - c
   }
 
-  def method13: Int = {
+  def method12b: Int = {
+    val a = Bar(Foo(1))
+    val c = 3 + sum2(a.f.a, a.f.a)
+    val d = sum2(a.f.a, a.f.a) + 3
+    val e = 3 + sum2(sum2(a.f.a, a.f.a), sum2(a.f.a, a.f.a))
+    val f = sum2(sum2(a.f.a, a.f.a), sum2(a.f.a, a.f.a)) + 3
+    assert(c == 5)
+    assert(d == 5)
+    assert(e == 13)
+    assert(f == 13)
+    d - c
+  }
+
+  def method12: Int = {
     class A(val a: Int) {
       @Idempotent def sum[N: Numeric](b: N) =
         a + implicitly[Numeric[N]].toInt(b)
@@ -134,7 +141,7 @@ object CommonSubexpression {
     c - b
   }
 
-  def method14: Int = {
+  def method13: Int = {
     class A(val a: Int) {
       @Idempotent def convert[N: Numeric]: N =
         implicitly[Numeric[N]].fromInt(a)
@@ -148,7 +155,7 @@ object CommonSubexpression {
     c - b
   }
 
-  def method15: Int = {
+  def method14: Int = {
     val a = 1
     val c = () => {
       val b = sum(sum(1, a), 3)
@@ -161,7 +168,7 @@ object CommonSubexpression {
     d - c2
   }
 
-  def method16: Int = {
+  def method15: Int = {
     val a = 1
     val c = {
       val e = () => {
@@ -240,6 +247,16 @@ object CommonSubexpression {
     sum(a, a)
   }
 
+  // DON'T OPTIMIZE IT
+  def method23: Int = {
+    val a = 1
+    if (a == 1) {
+      if (a == 1) sum(a, a)
+    } else sum(a, a)
+    println("DABEI")
+    sum(a, a)
+  }
+
   def main(args: Array[String]): Unit = {
     println("executing")
     assert(method1 == 1)
@@ -249,18 +266,17 @@ object CommonSubexpression {
     assert(method5 == 2)
     assert(method6 == 1)
     assert(method7 == 0)
-    assert(method8)
-    assert(method9 == 0)
+    assert(method8 == 0)
+    assert(method9)
     assert(method10)
-    assert(method11)
-    assert(method12 == 0)
-    assert(method13 == 1)
-    assert(method14 == 0)
+    assert(method11 == 0)
+    assert(method12 == 1)
+    assert(method13 == 0)
+    assert(method14 == 1)
     assert(method15 == 1)
-    assert(method16 == 1)
-/*    method17
-    method18*/
-    //assert(method19 == 5)
+    method17
+    method18
+    assert(method19 == 5)
   }
 
 }

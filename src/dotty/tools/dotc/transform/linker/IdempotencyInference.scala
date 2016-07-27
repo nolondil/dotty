@@ -128,32 +128,21 @@ class IdempotencyInference
   def isIdempotent(tree: Tree)(implicit ctx: Context): Boolean = {
     def loop(tree: Tree,
              pendingArgsList: Int,
-             isTopLevel: Boolean = false,
-             checkMethodRef: Boolean = false): Boolean = {
+             isTopLevel: Boolean = false): Boolean = {
       tree match {
         case Ident(_) if !isTopLevel =>
-          val sym = tree.symbol
-          val zeroArgs = pendingArgsList == 0
-
-          if (zeroArgs && checkMethodRef)
-            isIdempotentRef(sym) && !invalidMethodRef(sym)
-          else if (zeroArgs) isIdempotentRef(sym)
+          if (pendingArgsList == 0) isIdempotentRef(tree.symbol)
           else false
 
-        case EmptyTree | Literal(_) | This(_) if !isTopLevel =>
-          if (pendingArgsList == 0) true else false
+        case EmptyTree | Literal(_) | This(_) | Super(_, _)
+          if !isTopLevel => if (pendingArgsList == 0) true else false
 
         case Select(qual, _) =>
-          loop(qual, pendingArgsList) && {
-            val sym = tree.symbol
-            val validIdemRef = isIdempotentRef(sym)
-            if (checkMethodRef) validIdemRef && !invalidMethodRef(sym)
-            else validIdemRef
-          }
+          loop(qual, pendingArgsList) && isIdempotentRef(tree.symbol)
 
         case TypeApply(fn, _) =>
           if (pendingArgsList > 0) false
-          else if (isTopLevel) loop(fn, pendingArgsList, checkMethodRef = true)
+          else if (isTopLevel) loop(fn, pendingArgsList)
           else loop(fn, pendingArgsList)
 
         case Apply(fn, args) =>
@@ -162,8 +151,6 @@ class IdempotencyInference
             methodType.paramNamess.length - 1
           } else pendingArgsList - 1
           loop(fn, currentArgsList) && (args forall (t => loop(t, 0)))
-
-        case Super(_, _) => if (pendingArgsList == 0) true else false
 
         case _ => false
       }
