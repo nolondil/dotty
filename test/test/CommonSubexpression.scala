@@ -271,12 +271,57 @@ object CommonSubexpression {
   }
 
   // DON'T OPTIMIZE IT
-  def method23: Int = {
+  def method22b: Int = {
     val a = 1
     if (a == 1) {
       if (a == 1) sum(a, a)
     } else sum(a, a)
     println("DABEI")
+    sum(a, a)
+  }
+
+  def method23 = {
+    val a = 1
+    if (a == 1 || a == 2) {
+      if (a == 1) sum(a, a)
+      else sum(a, a)
+    } else sum(a, a)
+    sum(a, a)
+  }
+
+  def method24 = {
+    val a = 1
+    if (a == 1 && a == 2) {
+      if (a == 2) sum(a, a)
+      else sum(a, a)
+    } else sum(a, a)
+    sum(a, a)
+  }
+
+  def method24b = {
+    val a = 1
+    if (a == 1 && a == 1 && a == 2) {
+      if (a == 2 && a == 1) sum(a, a)
+      else sum(a, a)
+    } else sum(a, a)
+    sum(a, a)
+  }
+
+  def method25 = {
+    val a = 1
+    if (a == 1 ^ a == 2) {
+      if (a == 1 ^ a == 2) sum(a, a)
+      else sum(a, a)
+    } else sum(a, a)
+    sum(a, a)
+  }
+
+  def method25b = {
+    val a = 1
+    if (a == 2 ^ a == 1 ^ a == 2) {
+      if (a == 1 ^ a == 2) sum(a, a)
+      else sum(a, a)
+    } else sum(a, a)
     sum(a, a)
   }
 

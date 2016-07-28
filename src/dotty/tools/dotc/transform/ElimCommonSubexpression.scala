@@ -139,6 +139,25 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
     /* Maps original trees to entrypoints that need to be spliced when found. */
     var needsEntrypoint = mutable.HashMap[Tree, EntrypointInfo]()
 
+    val True: Tree = Literal(Constant(true))
+    val False: Tree = Literal(Constant(false))
+    def translateBooleanOpsToBranches(cond: Tree): Tree = cond match {
+      case Apply(Select(leftTree, booleanOp), List(rightTree)) =>
+        val translatedLeft = translateBooleanOpsToBranches(leftTree)
+        val translatedRight = translateBooleanOpsToBranches(rightTree)
+        if (booleanOp.toString == "$bar$bar")
+          If(translatedLeft, True, translatedRight)
+        else if (booleanOp.toString == "$amp$amp")
+          If(translatedLeft, translatedRight, False)
+        else if (booleanOp.toString == "$up")
+          If(translatedLeft,
+            If(translatedRight, False, True),
+            If(translatedRight, True, False)
+          )
+        else cond
+      case _ => cond
+    }
+
     def isUnitConstant(tree: Tree) = tree match {
       case Literal(constant) => constant == Constant(())
       case _ => false
@@ -198,7 +217,8 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
           State(counters -> (stats ++ updatedDiffStats)) -> traversal
 
         case branch @ If(cond, thenp, elsep) =>
-          val state = analyzer(cond, branch, currentCtx)
+          val transformedCond = translateBooleanOpsToBranches(cond)
+          val state = analyzer(transformedCond, branch, currentCtx)
           if (isUnitConstant(elsep)) state else {
             val analyzed = List(thenp, elsep).map(analyzer(_, branch, state))
             analyzed.reduceLeft { (accContext, newContext) =>
