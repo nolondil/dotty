@@ -131,7 +131,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
     val assignations = mutable.HashMap[Symbol, List[Tree]]()
 
     trait EntrypointPosition
-    case object InsideIf extends EntrypointPosition
+    case object InsideTreeAsTopLevel extends EntrypointPosition
     case object InsideBlock extends EntrypointPosition
 
     type EntrypointInfo = (Tree, EntrypointPosition)
@@ -142,6 +142,12 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
     def isUnitConstant(tree: Tree) = tree match {
       case Literal(constant) => constant == Constant(())
       case _ => false
+    }
+
+    def getFirstInnerTree(from: Tree) = from match {
+      case Block(stats2, expr) =>
+        if (stats2.isEmpty) expr else stats2.head
+      case topLevel => topLevel
     }
 
     def analyzer(tree: Tree, previous: Tree, currentCtx: PREContext): PREContext = {
@@ -163,6 +169,34 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
             (context, subTree) => analyzer(subTree, block, context)
           }
 
+        case tryCatch @ Try(expr, cases, finalizer) =>
+          val newCtx = analyzer(expr, tryCatch, currentCtx)
+          val (state, traversal) = newCtx
+          val (_, diffedStats) = state.diff(currentCtx._1).get
+
+          val caseSymbols: List[Symbol] = cases.map {
+            case CaseDef(pat, guard, body) =>
+              val first = getFirstInnerTree(body)
+              registerEntrypointBasedOnTree(body, first)
+          }
+          val finalizerSymbol: Option[Symbol] = {
+            if (finalizer == EmptyTree) None else {
+              val first = getFirstInnerTree(finalizer)
+              Some(registerEntrypointBasedOnTree(first, first))
+            }
+          }
+          val updatedDiffStats = diffedStats.map { kv =>
+            val (itree, (inits, stats)) = kv
+            val newInits =
+              if (finalizerSymbol.isEmpty) caseSymbols
+              else finalizerSymbol.get :: caseSymbols
+            val updatedInits = newInits ::: inits
+            itree -> (updatedInits, stats)
+          }
+
+          val (counters, stats) = state.get
+          State(counters -> (stats ++ updatedDiffStats)) -> traversal
+
         case branch @ If(cond, thenp, elsep) =>
           val state = analyzer(cond, branch, currentCtx)
           if (isUnitConstant(elsep)) state else {
@@ -180,19 +214,13 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
               val (currentState, traversal) = currentCtx
               if (allSubTrees.nonEmpty) traversal += allSubTrees
 
-              val initSymbol = previous match {
-                case valDef: ValOrDefDef => valDef.symbol
-                case _: If => registerEntrypoint(tree, InsideIf)
-                case _: Block => registerEntrypoint(tree, InsideBlock)
-                case _ => throw new Error(s"UNRECOGNISED ENTRYPOINT: $previous")
-              }
+              val initSymbol = registerEntrypointBasedOnTree(previous, tree)
 
               val newState = allSubTrees.foldLeft(currentState) { (state, st) =>
                 val subTree = st.tree
                 val (counters, stats) = state.get
                 val currentCounter = counters.getOrElse(st, 0)
                 val (inits, refs) = stats.getOrElse(st, EmptyIdempotentInfo)
-                // FIXME(jvican): Remove inits from the context, not necessary
                 val newInits = if (inits.isEmpty) List(initSymbol) else inits
                 val newRefs = subTree :: refs
                 val newCounters = counters + (st -> (currentCounter + 1))
@@ -226,6 +254,17 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       entrypointSymbol
     }
 
+    def registerEntrypointBasedOnTree(previous: Tree, at: Tree): Symbol = {
+      previous match {
+        case valDef: ValOrDefDef => valDef.symbol
+        case _: Block => registerEntrypoint(at, InsideBlock)
+        case tree =>
+          val symbol = tree.symbol
+          if (symbol != NoSymbol) symbol
+          else registerEntrypoint(at, InsideTreeAsTopLevel)
+      }
+    }
+
     def pruneShorterTrees(counters: List[(IdempotentTree, Int)]) = {
       if (counters.isEmpty) Nil else {
         counters.foldLeft(List(counters.head)){ (acc, itreeCounter) =>
@@ -248,8 +287,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       IdempotentTrees.markIdempotent(symbol)
       val valDef = tpd.ValDef(symbol, tpd.defaultValue(tpe))
       val ref = tpd.ref(symbol)
-      val valDefIdent = tpd.ref(symbol)
-      val assign = Assign(valDefIdent, rhs)
+      val assign = Assign(ref, rhs)
       (valDef, assign, ref)
     }
 
@@ -272,12 +310,12 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
               val other = declarations.getOrElse(hostSymbol, List.empty[ValDef])
               val updatedDeclarations = declaration :: other
               declarations += hostSymbol -> updatedDeclarations
-              val alreadyAssigned = mutable.HashSet.empty[Tree]
+              val alreadyAssigned = mutable.HashSet.empty[Symbol]
+              val (lhs, rhs) = (assignation.lhs, assignation.rhs)
               inits.foreach { sym =>
                 // Branches may introduce repeated assignations
-                val (lhs, rhs) = (assignation.lhs, assignation.rhs)
-                if (!alreadyAssigned.contains(lhs)) {
-                  alreadyAssigned += lhs
+                if (!alreadyAssigned.contains(sym)) {
+                  alreadyAssigned += sym
                   // Apply recursive optimizations in the rhs
                   val updated = Assign(lhs, TreesUtils.replace(rhs, replacements))
                   registerAssignation(updated, sym)
@@ -304,7 +342,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
             pos match {
               case InsideBlock =>
                 tpd.Thicket(entrypoint, tree)
-              case InsideIf =>
+              case InsideTreeAsTopLevel =>
                 tpd.Block(List(entrypoint), tree)
             }
 
@@ -554,6 +592,14 @@ case class State(get: (Counters, IdempotentStats)) extends AnyVal {
     }
 
     State(newCounters -> newInfo)
+  }
+
+  def diff(other: State): State = {
+    val (cs, stats) = get
+    val (cs2, stats2) = other.get
+    val commonCounters = cs.filter(kv => !cs2.contains(kv._1))
+    val commonInfo = stats.filter(kv => !stats2.contains(kv._1))
+    State(commonCounters -> commonInfo)
   }
 
   def retainOptimizableExpressions: State = {

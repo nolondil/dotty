@@ -185,6 +185,16 @@ object CommonSubexpression {
 
   def method17: Unit = {
     val a = 1
+    val b = div(a, 0)
+    assert(b == 0)
+    val c = try {
+      val e = div(a, 0)
+    } catch { case e: Exception => 0 }
+    assert(c == 0)
+  }
+
+  def method17b: Unit = {
+    val a = 1
     val b = try {
       val d = div(a, 0)
     } catch { case e: Exception => 0}
@@ -200,6 +210,19 @@ object CommonSubexpression {
     val b = try {
       div(a, 0)
     } catch { case e: Exception => 0}
+    assert(b == 0)
+    val c = try {
+      div(a, 0)
+    } catch { case e: Exception => 0 }
+    assert(c == 0)
+  }
+
+  def method18b: Unit = {
+    val a = 1
+    val b = try {
+      div(a, 0)
+    } catch { case e: Exception => 0}
+    finally ()
     assert(b == 0)
     val c = try {
       div(a, 0)
