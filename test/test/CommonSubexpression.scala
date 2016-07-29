@@ -1,6 +1,7 @@
 package test
 
 import scala.annotation.Idempotent
+import scala.util.control.NonFatal
 
 object CommonSubexpression {
 
@@ -323,6 +324,13 @@ object CommonSubexpression {
       else sum(a, a)
     } else sum(a, a)
     sum(a, a)
+  }
+
+  def method26NotOptimize = {
+    val d: Double = null.asInstanceOf[Double]
+    println(d)
+    val f: Foo = null.asInstanceOf[Foo]
+    println(f)
   }
 
   def main(args: Array[String]): Unit = {
