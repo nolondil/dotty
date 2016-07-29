@@ -1,7 +1,6 @@
 package test
 
 import scala.annotation.Idempotent
-import scala.util.control.NonFatal
 
 object CommonSubexpression {
 
@@ -331,6 +330,11 @@ object CommonSubexpression {
     println(d)
     val f: Foo = null.asInstanceOf[Foo]
     println(f)
+  }
+
+  def method27= {
+    scala.math.Numeric.BigDecimalAsIfIntegral
+    scala.math.Numeric.ByteIsIntegral
   }
 
   def main(args: Array[String]): Unit = {

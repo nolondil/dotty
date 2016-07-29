@@ -142,22 +142,39 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
     val True: Tree = Literal(Constant(true))
     val False: Tree = Literal(Constant(false))
-    def translateCondToIfs(condTree: Tree): Tree = condTree match {
-      case Apply(Select(leftTree, booleanOp), List(rightTree)) =>
-        val translatedLeft = translateCondToIfs(leftTree)
-        val translatedRight = translateCondToIfs(rightTree)
-        if (booleanOp.toString == "$bar$bar")
-          If(translatedLeft, True, translatedRight)
-        else if (booleanOp.toString == "$amp$amp")
-          If(translatedLeft, translatedRight, False)
-        else condTree // Don't handle XOR and other possible ops
-      case Select(qual, name) =>
-        Select(translateCondToIfs(qual), name)
-      case Apply(fun, args) =>
-        Apply(translateCondToIfs(fun), args.map(translateCondToIfs))
-      case TypeApply(fun, targs) =>
-        TypeApply(translateCondToIfs(fun), targs.map(translateCondToIfs))
-      case _ => condTree
+    def translateCondToIfs(condTree: Tree): Tree = {
+      def toIf(cond: Tree, booleanOp: String, leftTree: Tree, rightTree: Tree) = {
+        if (booleanOp == "$bar$bar")
+          If(leftTree, True, rightTree)
+        else if (booleanOp == "$amp$amp")
+          If(leftTree, rightTree, False)
+        else cond // Don't handle XOR and other possible ops
+      }
+      def loop(cond: Tree): Tree = {
+        cond match {
+          case Apply(Select(leftTree, booleanOp), List(rightTree)) =>
+            toIf(cond, booleanOp.toString, loop(leftTree), loop(rightTree))
+          case TypeApply(Select(leftTree, booleanOp), List(rightTree)) =>
+            toIf(cond, booleanOp.toString, loop(leftTree), loop(rightTree))
+          case Select(qual, name) =>
+            val newQual = translateCondToIfs(qual)
+            if (qual == newQual) cond
+            else cpy.Select(cond)(newQual, name)
+          case Apply(fun, args) =>
+            val newFun = translateCondToIfs(fun)
+            val newArgs = args.map(translateCondToIfs)
+            if (newFun == fun && newArgs == args) cond
+            else cpy.Apply(cond)(newFun, newArgs)
+          case TypeApply(fun, targs) =>
+            val newFun = translateCondToIfs(fun)
+            val newTargs = targs.map(translateCondToIfs)
+            if (newFun == fun && newTargs == targs) cond
+            else cpy.TypeApply(cond)(newFun, newTargs)
+          case _ => cond
+        }
+      }
+      val result = loop(condTree)
+      if (result == condTree) condTree else result
     }
 
     def isUnitConstant(tree: Tree) = tree match {
@@ -219,8 +236,8 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
           State(counters -> (stats ++ updatedDiffStats)) -> traversal
 
         case branch @ If(cond, thenp, elsep) =>
-          //val transformedCond = translateCondToIfs(cond)
-          val state = analyzer(cond, branch, currentCtx)
+          val transformedCond = translateCondToIfs(cond)
+          val state = analyzer(transformedCond, branch, currentCtx)
           if (isUnitConstant(elsep)) state else {
             val analyzed = List(thenp, elsep).map(analyzer(_, branch, state))
             analyzed.reduceLeft { (accContext, newContext) =>
@@ -612,26 +629,28 @@ object State {
 case class State(get: (Counters, IdempotentStats)) extends AnyVal {
 
   def intersect(other: State): State = {
-    val (cs, stats) = get
-    val (cs2, stats2) = other.get
+    if (this == other) this else {
+      val (cs, stats) = get
+      val (cs2, stats2) = other.get
 
-    val newCounters = cs.flatMap { pair =>
-      val (key, value) = pair
-      cs2.get(key).map { value2 =>
-        List(key -> (if (value == 1 && value2 == 1) 1 else value + value2))
-      }.getOrElse(Nil)
+      val newCounters = cs.flatMap { pair =>
+        val (key, value) = pair
+        cs2.get(key).map { value2 =>
+          List(key -> (if (value == 1 && value2 == 1) 1 else value + value2))
+        }.getOrElse(Nil)
+      }
+
+      val newInfo = stats.flatMap { pair =>
+        val (key, value) = pair
+        stats2.get(key).map { value2 =>
+          val mixedInits = value._1 ++ value2._1
+          val mixedRefs = value._2 ++ value2._2
+          List(key -> (mixedInits -> mixedRefs))
+        }.getOrElse(Nil)
+      }
+
+      State(newCounters -> newInfo)
     }
-
-    val newInfo = stats.flatMap { pair =>
-      val (key, value) = pair
-      stats2.get(key).map { value2 =>
-        val mixedInits = value._1 ++ value2._1
-        val mixedRefs = value._2 ++ value2._2
-        List(key -> (mixedInits -> mixedRefs))
-      }.getOrElse(Nil)
-    }
-
-    State(newCounters -> newInfo)
   }
 
   def diff(other: State): State = {
