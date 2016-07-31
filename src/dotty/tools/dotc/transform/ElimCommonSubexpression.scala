@@ -12,30 +12,15 @@ import dotty.tools.dotc.transform.linker.IdempotencyInference
 import State.{Counters, EmptyIdempotentInfo, IdempotentInfo, IdempotentStats}
 import dotty.tools.dotc.core.Constants.Constant
 
-/** This phase performs Common Subexpression Elimination (CSE) that
+/** This phase performs Partial Redundancy Elimination (PRE) that
   * precomputes an expression into a new variable when it's used
-  * several times within the same scope.
+  * several times within the same scope. It performs optimizations
+  * accross different scopes (branches and inner functions), and it is
+  * therefore more powerful than Common Subexpression Elimination (CSE).
   *
   * This optimization is applied for either vals, lazy vals or
   * expressions annotated with `Idempotent`. Such annotation is used to
   * ensure to the compiler that a concrete expression has no side effects.
-  *
-  * For instance, the following code:
-  * {{{
-  *   val a = 1
-  *   val b = a + a + 2
-  *   val c = a + a + 4
-  * }}}
-  *
-  * will be transformed to:
-  * {{{
-  *   val a = 1
-  *   val a1 = a + a
-  *   val b = a1 + 2
-  *   val c = a1 + 2
-  * }}}
-  *
-  * only if `+` is guaranteed to be idempotent.
   *
   * @author jvican (Inspired by the work of @allanrenucci)
   *
@@ -115,20 +100,20 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
     import collection.mutable
 
-    /* DummyTrees that are introduced to know where the optimized `ValDef`s need
-     * to be spliced when their wrappers are trees that don't have symbols. */
+    /** DummyTrees that are introduced to know where the optimized `ValDef`s need
+      * to be spliced when their wrappers are trees that don't have symbols. */
     var entrypoints = mutable.HashSet[Symbol]()
 
-    /* Contexts that store the PREContext for every method. */
+    /** Contexts that store the PREContext for every method. */
     var orderedContexts = mutable.ListBuffer[(PREContext, Tree)]()
 
-    /* Replace by trees that are either a init or a ref of an optimized valdef. */
+    /** Replace by trees that are either a init or a ref of an optimized valdef. */
     val replacements = mutable.HashMap[Tree, Tree]()
 
-    /* Store the declarations of the optimized valdefs in the beginning of defs. */
+    /** Store the declarations of the optimized valdefs in the beginning of defs. */
     val declarations = mutable.HashMap[Symbol, List[ValDef]]()
 
-    /* Store the assignation of the optimized valdefs. */
+    /** Store the assignation of the optimized valdefs. */
     val assignations = mutable.HashMap[Symbol, List[Tree]]()
 
     trait EntrypointPosition
@@ -188,6 +173,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       case topLevel => topLevel
     }
 
+    /** Analyze and spot the optimizable expressions in the program. */
     def analyzer(tree: Tree, previous: Tree, currentCtx: PREContext): PREContext = {
       tree match {
         case valDef: ValDef =>
@@ -282,9 +268,13 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       assignations += (at -> (assignation :: otherTargets))
     }
 
+    /** Generate an entrypoint, which is a new symbol that we introduce to mark
+      * the concrete location in which an optimized expression is to be initialized.
+      * We generate symbols for trees that do not have (like ifs, blocks, etc). */
     def generateEntrypoint: ValDef =
       tpd.SyntheticValDef(ctx.freshName("entrypoint$$").toTermName, EmptyTree)
 
+    /** Register an entrypoint and add it to the global state. */
     def registerEntrypoint(at: Tree, pos: EntrypointPosition): Symbol = {
       val entrypoint = generateEntrypoint
       val entrypointSymbol = entrypoint.symbol
@@ -293,6 +283,8 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       entrypointSymbol
     }
 
+    /** Return a new symbol depending on the shape of the tree. If it already
+      * has a symbol, return it. Otherwise, generate and register it. */
     def registerEntrypointBasedOnTree(previous: Tree, at: Tree): Symbol = {
       previous match {
         case valDef: ValOrDefDef => valDef.symbol
@@ -304,6 +296,8 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       }
     }
 
+    /** Decide the optimizable expressions in a family of idempotent trees,
+      * that is, all the possible top and sub trees that are idempotent. */
     def pruneShorterTrees(counters: List[(IdempotentTree, Int)]) = {
       if (counters.isEmpty) Nil else {
         counters.foldLeft(List(counters.head)){ (acc, itreeCounter) =>
@@ -316,7 +310,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       }
     }
 
-    /** Return result of the optimization */
+    /** Optimize a candidate and return its declaration, assignation and ref. */
     @inline def optimize(cand: IdempotentTree): Optimized = {
       val name = ctx.freshName("cse$$").toTermName
       val flags = Flags.Synthetic | Flags.Mutable
@@ -330,6 +324,10 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       (valDef, assign, ref)
     }
 
+    /** Preoptimize recursively the trees by pruning them and selecting the
+      * ones that should be optimized. Add these to the global mutable state.
+      * To introduce the initializers correctly, introduce the entrypoints
+      * before transforming the trees so that we can identify the original ones. */
     val preOptimizer: PreOptimizer = () => {
       def optimizeContext(context: PREContext, host: Tree): Unit = {
         val hostSymbol = host.symbol
@@ -409,6 +407,10 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       }
     }
 
+    /** Perform the optimization: add initializers to the top level function
+      * in which it was found, add the assignations in the correct position
+      * (removing entrypoints if necessary, since they are not useful anymore)
+      * and substitute any original apperance of optimized trees by their refs. */
     val transformer: Transformer = () => {
       needsEntrypoint = null
       (t: Tree) => t match {
@@ -471,6 +473,9 @@ object IdempotentTrees {
 
   import ast.tpd._
 
+  /** [[IdempotentTree]]s are wrappers over trees that give us structural
+    * equality and therefore the ability to compare different trees with
+    * the same shape. It gives us a unique representation of a tree. */
   class IdempotentTree(val tree: tpd.Tree)(implicit ctx: Context) {
 
     import scala.util.hashing.MurmurHash3.{seqHash, mix}
@@ -613,8 +618,14 @@ object TreesUtils {
 object State {
 
   import tpd.Tree
+
+  /** Appearances of a given optimizable tree. */
   type Counters = Map[IdempotentTree, Int]
+
+  /** Symbols where we store the initializers and references to an idem tree. */
   type IdempotentInfo = (List[Symbol], List[Tree])
+
+  /** Maps the idempotent trees to the local idempotent information. */
   type IdempotentStats = Map[IdempotentTree, IdempotentInfo]
 
   val EmptyIdempotentInfo: IdempotentInfo =
@@ -626,8 +637,13 @@ object State {
 
 }
 
+/** The [[State]] gathers information of the program and stores the set of all
+  * the potential optimizable expressions at a concrete point of the traversal.
+  * By being immutable, it helps us to support fundamental ops like `intersect`
+  * and `diff`, and therefore deal with branches and inner functions. */
 case class State(get: (Counters, IdempotentStats)) extends AnyVal {
 
+  /** Return the common idempotent trees in both states. */
   def intersect(other: State): State = {
     if (this == other) this else {
       val (cs, stats) = get
@@ -636,7 +652,10 @@ case class State(get: (Counters, IdempotentStats)) extends AnyVal {
       val newCounters = cs.flatMap { pair =>
         val (key, value) = pair
         cs2.get(key).map { value2 =>
-          List(key -> (if (value == 1 && value2 == 1) 1 else value + value2))
+          List(key -> (
+            if (value == 1 && value2 == 1) 1
+            else value + value2)
+          )
         }.getOrElse(Nil)
       }
 
@@ -653,6 +672,7 @@ case class State(get: (Counters, IdempotentStats)) extends AnyVal {
     }
   }
 
+  /** Return the idempotent trees not present in the [[other]] state. */
   def diff(other: State): State = {
     val (cs, stats) = get
     val (cs2, stats2) = other.get
@@ -661,6 +681,7 @@ case class State(get: (Counters, IdempotentStats)) extends AnyVal {
     State(commonCounters -> commonInfo)
   }
 
+  /** Retain the trees that are optimizable (appeared more than once). */
   def retainOptimizableExpressions: State = {
     val optimizable = get._1.filter(_._2 > 1)
     val optimizableStats = get._2.filterKeys(optimizable.contains)
