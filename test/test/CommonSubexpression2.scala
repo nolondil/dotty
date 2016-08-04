@@ -304,6 +304,94 @@ class A {
     count = 0
   }
 
+  var c: Boolean = false
+  def test27b(): Unit = {
+    if (c) bar else bar
+    idem1
+    def bar = idem1
+
+    assert(count == 2)
+    count = 0
+  }
+
+  def test27cNotOptimized(): Unit = {
+    if (c) bar else ()
+    idem1
+    def bar = idem1
+
+    assert(count == 1)
+    count = 0
+  }
+
+  def test27d(): Unit = {
+    try {
+      bar
+    } catch {
+      case t: Throwable =>
+    }
+    idem1
+    def bar = idem1
+
+    assert(count == 2)
+    count = 0
+  }
+
+  def test27e(): Unit = {
+    bar
+    idem1
+    def bar = {
+      def bar2 = {
+        println("A")
+        idem1
+        println("B")
+      }
+      bar2
+    }
+
+    assert(count == 2)
+    count = 0
+  }
+
+  def test27f(): Unit = {
+    bar1(1)
+    idem1
+    def bar1(a: Int) = {
+      println("A")
+      idem1
+    }
+
+    assert(count == 3)
+    count = 0
+  }
+
+  def test27g(): Unit = {
+    def foo(i: Any) = ()
+    foo(if (bar1(1) == 1) 1 else 2)
+    bar1(1)
+    idem1
+    def bar1(a: Int) = {
+      println("A")
+      idem1
+    }
+
+    assert(count == 3)
+    count = 0
+  }
+
+  def test27hNonOptimizable(): Unit = {
+    def foo(i: Any) = ()
+    foo(if (c) bar1(1) else ())
+    bar1(1)
+    idem1
+    def bar1(a: Int) = {
+      println("A")
+      idem1
+    }
+
+    assert(count == 3)
+    count = 0
+  }
+
   def test28(): Unit = {
     val a = idem1
     def bar = idem1
@@ -355,7 +443,6 @@ class A {
     assert(count == 2)
     count = 0
   }
-
   def test34(): Unit = {
     def foo(s: => Int) = s
 
@@ -426,7 +513,7 @@ object Test {
     val a = new A
     import a._
 
-/*    test1()
+    test1()
     test2()
     test3()
     test4()
@@ -470,6 +557,6 @@ object Test {
 
     // Regression tests
     reg1()
-    reg2()*/
+    reg2()
   }
 }
