@@ -298,7 +298,10 @@ class A {
   def test27(): Unit = {
     bar
     idem1
-    def bar = idem1
+    def bar = {
+      println("")
+      idem1
+    }
 
     assert(count == 2)
     count = 0
@@ -308,7 +311,10 @@ class A {
   def test27b(): Unit = {
     if (c) bar else bar
     idem1
-    def bar = idem1
+    def bar = {
+      println("")
+      idem1
+    }
 
     assert(count == 2)
     count = 0
@@ -317,7 +323,10 @@ class A {
   def test27cNotOptimized(): Unit = {
     if (c) bar else ()
     idem1
-    def bar = idem1
+    def bar = {
+      println("")
+      idem1
+    }
 
     assert(count == 1)
     count = 0
@@ -443,7 +452,8 @@ class A {
     assert(count == 2)
     count = 0
   }
-  def test34(): Unit = {
+
+  def test34NotOptimizable(): Unit = {
     def foo(s: => Int) = s
 
     val a = foo(idem1)
@@ -550,7 +560,7 @@ object Test {
     test31()
     test32()
     test33()
-    test34()
+    test34NotOptimizable()
     test35() // inner functions
     test36() // inner functions
     test37() // inner functions

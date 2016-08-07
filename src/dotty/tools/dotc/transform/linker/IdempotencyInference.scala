@@ -126,13 +126,19 @@ class IdempotencyInference
   /** Detect whether a tree is a valid idempotent or not, the semantics
    * of the method are tightly coupled with `allIdempotentTrees` in CSE. */
   def isIdempotent(tree: Tree)(implicit ctx: Context): Boolean = {
+    def isParameterlessMethod(sym: Symbol) =
+      sym.is(Flags.Method) && sym.info.isParameterless
+
     def loop(tree: Tree,
              pendingArgsList: Int,
              isTopLevel: Boolean = false): Boolean = {
       tree match {
-        case Ident(_) if !isTopLevel =>
-          if (pendingArgsList == 0) isIdempotentRef(tree.symbol)
-          else false
+        case Ident(_) =>
+          val sym = tree.symbol
+          if (pendingArgsList == 0 &&
+              (!isTopLevel || (isTopLevel && isParameterlessMethod(sym)))) {
+            isIdempotentRef(sym)
+          } else false
 
         case EmptyTree | Literal(_) | This(_) | Super(_, _)
           if !isTopLevel => if (pendingArgsList == 0) true else false
