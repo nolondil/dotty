@@ -39,7 +39,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
   override def runsAfter =
     Set(classOf[ElimByName], classOf[IdempotencyInference])
 
-  type Analyzer = (Tree, Tree, Tree, PREContext) => PREContext
+  type Analyzer = (Tree, Tree, Tree, Set[Symbol], PREContext) => PREContext
   type PreOptimizer = () => (Tree => Tree)
   type Transformer = () => (Tree => Tree)
   type Optimization = (Context) => (Analyzer, PreOptimizer, Transformer)
@@ -74,7 +74,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
           elimCommonSubexpression(ctx.withOwner(tree.symbol))
 
         val emptyTraversal = ListBuffer[List[IdempotentTree]]()
-        analyzer(tree, tree, tree, State() -> emptyTraversal)
+        analyzer(tree, tree, tree, Set.empty[Symbol], State() -> emptyTraversal)
 
         val preOptimizer = nonInitOptimizer()
         val preOptimizedTree = new TreeMap() {
@@ -200,14 +200,17 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
     def analyzer(tree: Tree,
                  previous: Tree,
                  topLevel: Tree,
+                 visitedMethods: Set[Symbol],
                  currentCtx: PREContext): PREContext = {
       tree match {
         case valDef: ValDef =>
-          analyzer(valDef.rhs, valDef, topLevel, currentCtx)
+          analyzer(valDef.rhs, valDef, topLevel, visitedMethods, currentCtx)
 
         case defDef: DefDef =>
           if (tree == topLevel) {
-            val (state, traversal) = analyzer(defDef.rhs, defDef, topLevel, currentCtx)
+            val updatedMethods = visitedMethods + defDef.symbol
+            val (state, traversal) =
+              analyzer(defDef.rhs, defDef, topLevel, updatedMethods, currentCtx)
             val optimizedState = state.retainOptimizableExpressions
             val newContext = optimizedState -> traversal
             orderedContexts += (newContext -> tree)
@@ -216,11 +219,12 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
 
         case block: Block =>
           (block.stats ::: List(block.expr)).foldLeft(currentCtx) {
-            (context, subTree) => analyzer(subTree, block, topLevel, context)
+            (context, subTree) =>
+              analyzer(subTree, block, topLevel, visitedMethods, context)
           }
 
         case tryCatch @ Try(expr, cases, finalizer) =>
-          val newCtx = analyzer(expr, tryCatch, topLevel, currentCtx)
+          val newCtx = analyzer(expr, tryCatch, topLevel, visitedMethods, currentCtx)
           val (state, traversal) = newCtx
           val (_, diffedStats) = state.diff(currentCtx._1).get
 
@@ -247,12 +251,13 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
           val (counters, stats) = state.get
           State(counters -> (stats ++ updatedDiffStats)) -> traversal
 
-        case branch @ If(cond, thenp, elsep) =>
-          val transformedCond = translateCondToIfs(cond)
-          val state = analyzer(transformedCond, branch, topLevel, currentCtx)
+        case branch @ If(rawCond, thenp, elsep) =>
+          val cond = translateCondToIfs(rawCond)
+          val state = analyzer(cond, branch, topLevel, visitedMethods, currentCtx)
           if (isUnitConstant(elsep)) state else {
             val toAnalyze = List(thenp, elsep)
-            val analyzed = toAnalyze.map(analyzer(_, branch, topLevel, state))
+            val analyzed = toAnalyze.map(
+              analyzer(_, branch, topLevel, visitedMethods, state))
             analyzed.reduceLeft { (accContext, newContext) =>
               // Traversal list is mutable, choose whichever
               accContext._1.intersect(newContext._1) -> newContext._2
@@ -291,11 +296,17 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
                 val innerFunInvocations: List[DefDef] =
                   TreesUtils.collectInvocations(tree, innerFuns)
 
-                // Analyze inner functions from the ctx in the first callsite
+                // Analyze inner functions from the ctx in the first call-site
                 innerFunInvocations.foldLeft(currentCtx) { (octx, defDef) =>
-                  // Remove to deal with recursion and avoid more optimizations
-                  innerFuns -= defDef.symbol
-                  analyzer(defDef.rhs, defDef, topLevel, octx)
+                  val defSymbol = defDef.symbol
+                  // Make sure we don't follow recursive methods
+                  if (!visitedMethods.contains(defSymbol)) {
+                    val visited = visitedMethods + defSymbol
+                    analyzer(defDef.rhs, defDef, topLevel, visited, octx)
+                  } else {
+                    innerFuns -= defDef.symbol
+                    octx
+                  }
                 }
               }
           }
