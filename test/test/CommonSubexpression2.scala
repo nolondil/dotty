@@ -502,6 +502,20 @@ class A {
     count = 0
   }
 
+  def test38(): Unit = {
+    @Idempotent def foo = idem1
+    foo
+    idem1
+  }
+
+  def test38b(): Unit = {
+    val c = 1
+    @Idempotent def foo: Int = idem1
+    @Idempotent def sum(a: Int, b: Int) = { a + b + c + c}
+    sum(c + c, foo + foo)
+    foo + foo
+  }
+
   def reg1(): Unit = {
     // TODO remove from run when #972 is fixed
     // Duplicate of i972 in pos/idempotentcalls

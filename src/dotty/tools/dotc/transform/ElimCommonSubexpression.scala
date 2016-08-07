@@ -69,6 +69,7 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
       implicit val ctx: Context = ctx0
 
       val sym = tree.symbol
+      // TODO: Should we not optimize labels as well?
       if (!isInnerFunction(sym) && !sym.is(Flags.Label)) {
         val (analyzer, nonInitOptimizer, nonInitTransformer) =
           elimCommonSubexpression(ctx.withOwner(tree.symbol))
@@ -265,6 +266,8 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
           }
 
         case tree: Tree =>
+          val funsOpt = innerFunctionsOf.get(topLevel.symbol)
+
           IdempotentTrees.from(tree) match {
             case Some(idempotent) =>
               val allSubTrees = IdempotentTrees.allIdempotentTrees(idempotent)
@@ -285,32 +288,44 @@ class ElimCommonSubexpression extends MiniPhaseTransform {
                 State(newCounters -> newStats)
               }
 
-              newState -> traversal
+              val optimizedCtx = newState -> traversal
+              if (funsOpt.isEmpty || funsOpt.get.isEmpty) optimizedCtx
+              else optimizeInnerFunctions(
+                tree, optimizedCtx, visitedMethods, topLevel, funsOpt.get)
 
             case _ =>
 
-              val queryFuns = innerFunctionsOf.get(topLevel.symbol)
-              if (queryFuns.isEmpty || queryFuns.get.isEmpty) currentCtx else {
-                val innerFuns = queryFuns.get
-                // Gather the invocations in post-order
-                val innerFunInvocations: List[DefDef] =
-                  TreesUtils.collectInvocations(tree, innerFuns)
-
-                // Analyze inner functions from the ctx in the first call-site
-                innerFunInvocations.foldLeft(currentCtx) { (octx, defDef) =>
-                  val defSymbol = defDef.symbol
-                  // Make sure we don't follow recursive methods
-                  if (!visitedMethods.contains(defSymbol)) {
-                    val visited = visitedMethods + defSymbol
-                    analyzer(defDef.rhs, defDef, topLevel, visited, octx)
-                  } else {
-                    innerFuns -= defDef.symbol
-                    octx
-                  }
-                }
-              }
+              if (funsOpt.isEmpty || funsOpt.get.isEmpty) currentCtx
+              else optimizeInnerFunctions(
+                tree, currentCtx, visitedMethods, topLevel, funsOpt.get)
           }
       }
+    }
+
+    @inline def optimizeInnerFunctions(tree: Tree,
+                                       currentCtx: PREContext,
+                                       visitedMethods: Set[Symbol],
+                                       topLevel: Tree,
+                                       innerFuns: InnerFuns) = {
+
+      // Gather the invocations in post-order
+      val invocations: List[DefDef] =
+        TreesUtils.collectInvocations(tree, innerFuns)
+
+      // Analyze inner functions from the ctx in the first call-site
+      invocations.foldLeft(currentCtx) { (octx, defDef) =>
+        val defSymbol = defDef.symbol
+
+        // Make sure we don't follow recursive methods
+        if (!visitedMethods.contains(defSymbol)) {
+          val visited = visitedMethods + defSymbol
+          analyzer(defDef.rhs, defDef, topLevel, visited, octx)
+        } else {
+          innerFuns -= defDef.symbol
+          octx
+        }
+      }
+
     }
 
     /* Register a `ValDef` to be introduced before the tree with the symbol. */
