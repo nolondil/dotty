@@ -753,7 +753,7 @@ class DottyBackendInterface(outputDirectory: AbstractFile, val superCallsMap: Ma
       val additional = (superCalls -- directlyInheritedTraitsSet).filter(_.is(Flags.Trait))
 //      if (additional.nonEmpty)
 //        println(s"$fullName: adding supertraits $additional")
-      directlyInheritedTraits.filter(t => !allBaseClasses(t) || superCalls(t)) ++ additional
+      directlyInheritedTraits.filter(t => true || !allBaseClasses(t) || superCalls(t)) ++ additional
     }
 
     /**
