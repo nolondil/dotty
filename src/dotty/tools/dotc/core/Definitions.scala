@@ -422,6 +422,10 @@ class Definitions {
   def DynamicClass(implicit ctx: Context) = DynamicType.symbol.asClass
   lazy val OptionType: TypeRef                  = ctx.requiredClassRef("scala.Option")
   def OptionClass(implicit ctx: Context) = OptionType.symbol.asClass
+  lazy val SomeType: TypeRef                  = ctx.requiredClassRef("scala.Some")
+  def SomeClass(implicit ctx: Context) = SomeType.symbol.asClass
+  lazy val NoneModuleRef: TermRef                  = ctx.requiredModuleRef("scala.None")
+  def NoneClass(implicit ctx: Context) = NoneModuleRef.symbol.moduleClass.asClass
   lazy val ProductType: TypeRef                 = ctx.requiredClassRef("scala.Product")
   def ProductClass(implicit ctx: Context) = ProductType.symbol.asClass
     lazy val Product_canEqualR = ProductClass.requiredMethodRef(nme.canEqual_)

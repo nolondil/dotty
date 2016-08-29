@@ -1,8 +1,8 @@
-import dotty.tools.dotc.ast.Trees._
-import dotty.tools.dotc.core.Types._
+//import dotty.tools.dotc.ast.Trees._
+//import dotty.tools.dotc.core.Types._
 
 object Patterns {
-  val d: Object = null
+/*  val d: Object = null
   private def rebase(tp: NamedType): Type = {
     def rebaseFrom(prefix: Type): Type = ???
     tp.prefix match {
@@ -72,7 +72,7 @@ object Patterns {
     case _ :: xs1 => 1 + len(xs1)
     case Nil => 0
   }
-
+*/
   final def sameLength[T](xs: List[T], ys: List[T]): Boolean = xs match {
     case _ :: xs1 => xs1.isEmpty
       ys match {
@@ -82,7 +82,7 @@ object Patterns {
     case _ => ys.isEmpty
   }
 
-  class A{
+/*  class A{
     class B
   }
   val a1 = new A
@@ -101,10 +101,10 @@ object Patterns {
     case a: caseWithPatternVariableHelper1[_] => ()
     case b: caseWithPatternVariableHelper2[_] => ()
   }
-
+*/
 }
 
-object NestedPattern {
+/*object NestedPattern {
   val xss: List[List[String]] = ???
   val List(List(x)) = xss
-}
+}*/
