@@ -7,16 +7,16 @@ import Periods._
 import Symbols._
 import Types._
 import Scopes._
-import typer.{FrontEnd, Typer, ImportInfo, RefChecks}
-import reporting.{Reporter, ConsoleReporter}
+import typer.{FrontEnd, ImportInfo, RefChecks, Typer}
+import reporting.{ConsoleReporter, Reporter}
 import Phases.Phase
 import transform._
 import transform.TreeTransforms.{TreeTransform, TreeTransformer}
 import core.DenotTransformers.DenotTransformer
 import core.Denotations.SingleDenotation
-
-import dotty.tools.backend.jvm.{LabelDefs, GenBCode, CollectSuperCalls}
+import dotty.tools.backend.jvm.{CollectSuperCalls, GenBCode, LabelDefs}
 import dotty.tools.backend.sjs.GenSJSIR
+import dotty.tools.dotc.transform.linker.Simplify
 
 /** The central class of the dotc compiler. The job of a compiler is to create
  *  runs, which process given `phases` in a given `rootContext`.
@@ -62,7 +62,9 @@ class Compiler {
            new ExplicitOuter,       // Add accessors to outer classes from nested ones.
            new ExplicitSelf,        // Make references to non-trivial self types explicit as casts
            new CrossCastAnd,        // Normalize selections involving intersection types.
-           new Splitter),           // Expand selections involving union types into conditionals
+           new Splitter,            // Expand selections involving union types into conditionals
+           new Simplify
+      ),
       List(new VCInlineMethods,     // Inlines calls to value class methods
            new IsInstanceOfEvaluator, // Issues warnings when unreachable statements are present in match/if expressions
            new SeqLiterals,         // Express vararg arguments as arrays
