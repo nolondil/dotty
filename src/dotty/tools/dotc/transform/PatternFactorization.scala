@@ -37,10 +37,10 @@ trait PatternFactorization extends MiniPhaseTransform {
   }
 
   override def transformMatch(tree: Match)(implicit ctx: Context, info: TransformerInfo): Tree = {
-    println(s">>> ${this.getClass.getName}.transformMatch  " + tree.selector.tpe.show + " " + tree.tpe.show)
-    println(tree.show)
-    tree.cases.foreach(println)
-    println()
+    //println(s">>> ${this.getClass.getName}.transformMatch  " + tree.selector.tpe.show + " " + tree.tpe.show)
+    //println(tree.show)
+    //tree.cases.foreach(println)
+    //println()
     val (factoredCases, fallbackCases) = factorized(tree.cases)
     if (factoredCases.nonEmpty) {
       val selectorSym =
