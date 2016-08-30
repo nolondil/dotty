@@ -1,3 +1,4 @@
+// infinite cycle in PatternTypeFactorization
 object Test extends App {
 
   trait SpecialException extends Throwable {}

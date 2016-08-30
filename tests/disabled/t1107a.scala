@@ -1,3 +1,4 @@
+// infinite cycle in PatternTypeFactorization
 object F {
   type AnyClass = Class[_]
   def tryf[T](ignore: List[AnyClass])(f: => T): Any = {
