@@ -45,19 +45,19 @@ class PatternTypeFactorization extends PatternFactorization {
     }
   }
 
-  protected def asInnerMatchIfNeeded(caseDefs: List[CaseDef], fallbackOpt: Option[Tree])(implicit ctx: Context, info: TransformerInfo): CaseDef = {
+  protected def asInnerMatchIfNeeded(sel: Symbol, caseDefs: List[CaseDef], fallbackOpt: Option[Tree])(implicit ctx: Context, info: TransformerInfo): CaseDef = {
     assert(caseDefs.nonEmpty)
     val fallbackCase = fallbackOpt.map(CaseDef(Underscore(caseDefs.head.pat.tpe.widen), EmptyTree, _))
-    asInnerMatch(caseDefs ++ fallbackCase)
+    asInnerMatch(sel, caseDefs ++ fallbackCase)
   }
 
   protected def factorCases(cases: List[CaseDef])(implicit ctx: Context, info: TransformerInfo): List[List[CaseDef]] = {
     def loop(remaining: List[CaseDef], groups: List[List[CaseDef]]): List[List[CaseDef]] = {
       remaining match {
-        case c0 :: _ =>
+        case c0 :: tail =>
           val tpe = c0.pat.tpe.widen
-          val (span, rest) = remaining.span(_.pat.tpe <:< tpe)
-          loop(rest, span :: groups)
+          val (span, rest) = tail.span(_.pat.tpe <:< tpe)
+          loop(rest, (c0 :: span) :: groups)
 
         case Nil => groups.reverse
       }
@@ -65,10 +65,10 @@ class PatternTypeFactorization extends PatternFactorization {
     loop(cases, Nil)
   }
 
-  protected def asInnerMatch(cases: List[CaseDef])(
+  protected def asInnerMatch(sel: Symbol, cases: List[CaseDef])(
     implicit ctx: Context, info: TransformerInfo): CaseDef = {
     assert(cases.nonEmpty)
-    val tpe = cases.head.pat.tpe.widen
+    val tpe = cases.head.pat.tpe.widen.orElse(sel.info.widen)
     val selName = ctx.freshName("fact").toTermName
     val factorizedSelector =
       ctx.newSymbol(ctx.owner, selName, Flags.Synthetic | Flags.Case, tpe)

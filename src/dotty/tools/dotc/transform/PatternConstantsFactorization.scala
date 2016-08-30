@@ -56,7 +56,7 @@ class PatternConstantsFactorization extends PatternFactorization {
     }
   }
 
-  protected def asInnerMatchIfNeeded(caseDefs: List[CaseDef], fallbackOpt: Option[Tree])(implicit ctx: Context, info: TransformerInfo): CaseDef = {
+  protected def asInnerMatchIfNeeded(sel: Symbol, caseDefs: List[CaseDef], fallbackOpt: Option[Tree])(implicit ctx: Context, info: TransformerInfo): CaseDef = {
     assert(caseDefs.nonEmpty)
     caseDefs.head match {
       case caseDef @ CaseDef(Literal(_), EmptyTree, _) if caseDefs.size == 1 => caseDef
