@@ -14,8 +14,10 @@ import core.NameOps._
 import ast.Trees._
 import SymUtils._
 import dotty.tools.dotc.ast.tpd
+import dotty.tools.dotc.core.Mode
 import dotty.tools.dotc.core.Phases.Phase
 import util.Attachment
+
 import collection.mutable
 
 /** This phase adds outer accessors to classes and traits that need them.
@@ -71,9 +73,10 @@ class ExplicitOuter extends MiniPhaseTransform with InfoTransformer { thisTransf
   override def transformTemplate(impl: Template)(implicit ctx: Context, info: TransformerInfo): Tree = {
     val cls = ctx.owner.asClass
     val isTrait = cls.is(Trait)
+    val futureCtx = ctx.addMode(Mode.FutureDefsOK)
     if (needsOuterIfReferenced(cls) &&
         !needsOuterAlways(cls) &&
-        impl.existsSubTree(referencesOuter(cls, _)))
+        impl.existsSubTree(referencesOuter(cls, _)(futureCtx))(futureCtx))
       ensureOuterAccessors(cls)
     if (hasOuter(cls)) {
       val newDefs = new mutable.ListBuffer[Tree]
