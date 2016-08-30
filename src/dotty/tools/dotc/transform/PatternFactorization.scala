@@ -50,10 +50,16 @@ trait PatternFactorization extends MiniPhaseTransform {
 
       val fallbackDefDefOpt = {
         if (fallbackCases.nonEmpty) {
-          val fallbackMatch = transformMatch(Match(selector, fallbackCases))
+          val fallbackMatch = transformMatch(
+            Match(selector,
+              fallbackCases.map(x => CaseDef(x.pat, x.guard, Typed(x.body, TypeTree(tree.tpe))))
+            )
+          )
           val fallbackName = ctx.freshName("fallback").toTermName
           val fallbackSym =
-            ctx.newSymbol(ctx.owner, fallbackName, Flags.Synthetic | Flags.Label, MethodType(Nil, Nil)(x => fallbackMatch.tpe))
+            ctx.newSymbol(ctx.owner, fallbackName, Flags.Synthetic | Flags.Label, MethodType(Nil, Nil)(x => tree.tpe))
+            // though more precise type is fallbackMatch.tpe, this will break contracts between label-defs as it
+            // may need to include boxing/unboxing, making calls to other labels STOP being in tail position.
           Some(DefDef(fallbackSym, fallbackMatch))
         } else {
           None
@@ -63,7 +69,9 @@ trait PatternFactorization extends MiniPhaseTransform {
         Apply(Ident(fallbackDefDef.symbol.termRef), Nil)
       }
 
-      val newFactoredCases = factoredCases.map(asInnerMatchIfNeeded(selectorSym, _, fallbackOpt))
+      val newFactoredCases = factoredCases.map(x =>
+        asInnerMatchIfNeeded(selectorSym, x.map(x => CaseDef(x.pat, x.guard, Typed(x.body, TypeTree(tree.tpe)))), fallbackOpt)
+      )
 
       val fallbackCaseOpt = fallbackOpt.map { fallback =>
         CaseDef(Underscore(fallback.symbol.info), EmptyTree, fallback)
