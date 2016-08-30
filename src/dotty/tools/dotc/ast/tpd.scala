@@ -756,7 +756,10 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
      *  unless tree's type already conforms to `tp`.
      */
     def ensureConforms(tp: Type)(implicit ctx: Context): Tree =
-      if (tree.tpe <:< tp) tree
+      if (ctx.isAfterTyper && (tree.tpe.derivesFrom(defn.NullClass) || tree.tpe.derivesFrom(defn.NothingClass)))
+        // FIXME: didn't dig why does it break typer
+        Typed(tree, TypeTree(tp))
+      else if (tree.tpe <:< tp) tree
       else if (!ctx.erasedTypes) asInstance(tp)
       else Erasure.Boxing.adaptToType(tree, tp)
 
