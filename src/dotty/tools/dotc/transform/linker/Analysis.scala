@@ -44,7 +44,10 @@ object Analysis {
 
   private val methodsWhiteList = List(
     "java.lang.Math.min",
-    "java.lang.Math.max"
+    "java.lang.Math.max",
+    "java.lang.Object.eq",
+    "java.lang.Object.ne",
+    "scala.Boolean.$amp$amp"
   )
 
   def effectsDontEscape(t: Tree)(implicit ctx: Context) = {
