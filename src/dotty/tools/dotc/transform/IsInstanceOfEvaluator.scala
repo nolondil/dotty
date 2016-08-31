@@ -47,7 +47,7 @@ class IsInstanceOfEvaluator extends MiniPhaseTransform { thisTransformer =>
     def handleStaticallyKnown(select: Select, scrutinee: Type, selector: Type, inMatch: Boolean, pos: Position): Tree = {
       val scrutineeSubSelector = scrutinee <:< selector
       if (!scrutineeSubSelector && inMatch) {
-        ctx.error(
+        ctx.warning(
           s"this case is unreachable due to `${selector.show}` not being a subclass of `${scrutinee.show}`",
           Position(pos.start - 5, pos.end - 5)
         )
