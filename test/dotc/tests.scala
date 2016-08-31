@@ -10,7 +10,7 @@ import scala.io.Source
 // tests that match regex '(pos|dotc|run|java|compileStdLib)\.*' would be executed as benchmarks.
 class tests extends CompilerTest {
 
-  def isRunByJenkins: Boolean = sys.props.isDefinedAt("dotty.jenkins.build")
+  def testMode: Boolean = false
 
   val noCheckOptions = List(
 //        "-verbose",
@@ -25,8 +25,8 @@ class tests extends CompilerTest {
   implicit val defaultOptions = noCheckOptions ++ List(
       "-Yno-deep-subtypes", "-Yno-double-bindings", "-Yforce-sbt-phases",
       "-d", defaultOutputDir) ++ {
-    if (isRunByJenkins) List("-Ycheck:tailrec,resolveSuper,mixin,restoreScopes") // should be Ycheck:all, but #725
-    else List("-Ycheck:tailrec,resolveSuper,mixin,restoreScopes")
+    if (testMode) List("-Ycheck:tailrec,resolveSuper,mixin,restoreScopes") // should be Ycheck:all, but #725
+    else Nil
   }
 
   val testPickling = List("-Xprint-types", "-Ytest-pickler", "-Ystop-after:pickler")

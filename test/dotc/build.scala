@@ -4,6 +4,9 @@ import java.io.File
 
 object build extends tests {
 
+
+  override def testMode: Boolean = false
+
   private def deleteFilesInFolder(folder: File, deleteFolder: Boolean = false): Unit = {
     val files = folder.listFiles()
     if(files != null) { //some JVMs return null for empty dirs
@@ -23,7 +26,7 @@ object build extends tests {
     deleteFilesInFolder(new File(defaultOutputDir)) // clear previous output
     val keepFile = new File(defaultOutputDir + ".keep")
     keepFile.createNewFile()
-    //dotty // build output dir
+    dotty // build output dir
     val p = Runtime.getRuntime.exec(Array("jar", "cf", "dotty.jar", "-C", "out", "."))
     p.waitFor()
     p
