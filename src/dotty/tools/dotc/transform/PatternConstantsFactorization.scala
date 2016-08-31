@@ -24,7 +24,7 @@ class PatternConstantsFactorization extends PatternFactorization {
 
   def phaseName: String = "patternConstantsFactorization"
 
-  override def runsAfter = Set(classOf[PatternTypeFactorization])
+  //override def runsAfter = Set(classOf[PatternTypeFactorization])
 
   override def transformTry(tree: Try)(implicit ctx: Context, info: TransformerInfo): Tree = tree
 

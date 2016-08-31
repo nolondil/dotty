@@ -28,10 +28,11 @@ class PatternTypeFactorization extends PatternFactorization {
 
   override def runsAfter = Set(classOf[TryCatchPatterns])
 
-  protected def shouldSwap(caseDef1: CaseDef, caseDef2: CaseDef)(implicit ctx: Context): Boolean = {
+  protected def shouldSwap(caseDef1: CaseDef, caseDef2: CaseDef)(implicit ctx: Context): Boolean = false && {
+    // fixme: this is wrong in case of primitives at least. run/matchbytes.scala demostrates this
     val tpe1 = caseDef1.pat.tpe.widen
     val tpe2 = caseDef2.pat.tpe.widen
-    !(tpe1 <:< tpe2) && !(tpe2 <:< tpe1) && tpe1.uniqId < tpe2.uniqId
+    tpe1.exists && tpe2.exists && !(tpe1 <:< tpe2) && !(tpe2 <:< tpe1) && tpe1.uniqId < tpe2.uniqId
   }
 
   protected def factorized(cases: List[CaseDef])(implicit ctx: Context, info: TransformerInfo): (List[List[CaseDef]], List[CaseDef]) = {
