@@ -47,7 +47,14 @@ object Analysis {
     "java.lang.Math.max",
     "java.lang.Object.eq",
     "java.lang.Object.ne",
-    "scala.Boolean.$amp$amp"
+    "scala.Boolean.$amp$amp",
+    "scala.runtime.BoxesRunTime.unboxToBoolean",
+    "scala.runtime.BoxesRunTime.unboxToLong",
+    "scala.runtime.BoxesRunTime.unboxToInt",
+    "scala.runtime.BoxesRunTime.unboxToShort",
+    "scala.runtime.BoxesRunTime.unboxToDouble",
+    "scala.runtime.BoxesRunTime.unboxToChar",
+    "scala.runtime.BoxesRunTime.unboxToFloat"
   )
 
   def effectsDontEscape(t: Tree)(implicit ctx: Context) = {
