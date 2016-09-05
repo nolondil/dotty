@@ -239,7 +239,12 @@ class GenBCodePipeline(val entryPoints: List[Symbol], val int: DottyBackendInter
      *          - converting the plain ClassNode to byte array and placing it on queue-3
      */
     class Worker2 {
-      lazy val localOpt = new LocalOpt(new Settings())
+      lazy val ScalaSettings = {
+        val set = new Settings()
+        set.Yopt.tryToSetFromPropertyValue("l:method")
+        set
+      }
+      lazy val localOpt = new LocalOpt(ScalaSettings)
 
       def localOptimizations(classNode: ClassNode): Unit = {
         /*BackendStats.timed(BackendStats.methodOptTimer)*/(localOpt.methodOptimizations(classNode))
