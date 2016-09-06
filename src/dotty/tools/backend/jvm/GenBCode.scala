@@ -241,7 +241,7 @@ class GenBCodePipeline(val entryPoints: List[Symbol], val int: DottyBackendInter
     class Worker2 {
       lazy val ScalaSettings = {
         val set = new Settings()
-        set.Yopt.tryToSetFromPropertyValue("l:method")
+        if (ctx.settings.optimise.value) set.Yopt.tryToSetFromPropertyValue("l:method")
         set
       }
       lazy val localOpt = new LocalOpt(ScalaSettings)
