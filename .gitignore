@@ -3,6 +3,9 @@
 *.log
 *~
 
+# mvim
+*.swp
+
 # sbt specific
 dist/*
 target/
