@@ -14,9 +14,6 @@ object myRules {
     Rewrite(from = x.dropWhile(p1).dropWhile(p2),
             to   = x.dropWhile(n => p1(n) && p2(n)))
 
-  def genTwoFilters[A](xs: List[A], p1: A => Boolean, p2: A => Boolean)(implicit apure: IsPure[p1.type]) =
-    Rewrite(from = xs.filter(p1).filter(p2),
-            to   = xs.filter(x => p1(x) && p2(x)))
 
   // ApplyTree
   /*def filterAndMap(x: List[Int], p: Int => Boolean, f: Int => Int) =
@@ -34,11 +31,34 @@ object myRules {
     )*/
 }
 
+/*@rewrites
+trait genericRules[T] {
+  def genTwoFilters(xs: List[T], p1: T => Boolean, p2: T => Boolean)(implicit apure: IsPure[p1.type]) =
+    Rewrite(from = xs.filter(p1).filter(p2),
+            to   = xs.filter(x => p1(x) && p2(x)))
+
+
+  def genTwoDropWhile(x: List[T], p1: T => Boolean, p2: T => Boolean)(implicit apure: IsPure[p1.type]) =
+    Rewrite(from = x.dropWhile(p1).dropWhile(p2),
+            to   = x.dropWhile(n => p1(n) && p2(n)))
+
+}*/
+
+class TestObject(val i: Int)
+
+class TestObject2(val xs: List[Int])
+
 object MyTest {
     def main(args: Array[String]): Unit = {
     List(1,2,3).map(x => 2*x).map(x => x + 1)
     List(1,2,3).filter(_ > 2).filter(_ > 1)
     List(1,2,3).dropWhile(_ < 2).dropWhile(_ < 1)
-    List(1,2,3,4,5,6).drop(2).dropRight(2)
+    List(1,2,3).dropWhile(_ < 2).dropWhile(_ < 1).dropWhile(_ < 0)
+    println(List(1,2,3,4,5,6).drop(2).dropRight(2))
+    println(List('a', 'b', 'c').filter(_ >= 'a').filter(_ < 'c'))
+    println(List(List(1,2,3), List(1,2,3,4), List(5,6,7,8,9)).filter(_.length > 3).filter(_.length < 5))
+    println(List(new TestObject(1), new TestObject(2), new TestObject(3)).filter(_.i < 2).filter(_.i < 1))
+    println(List(new TestObject2(List(1,2,3)), new TestObject2(List(1,2,3,4)), new TestObject2(List(5,6,7,8,9))).filter(_.xs.length > 3).filter(_.xs.length < 5))
+    println("hello world!")
   }
 }
